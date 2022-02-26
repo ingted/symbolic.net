@@ -1,0 +1,119 @@
+#r @"C:\git\mathnet-symbolics\src\Symbolics\bin\Debug\netstandard2.0\MathNet.Symbolics.dll"
+#r @"nuget:MathNet.Numerics"
+#r @"nuget:FsUnit"
+#r @"nuget:FParsec"
+#r @"nuget:MathNet.Numerics.FSharp"
+#load @"C:\git\mathnet-symbolics\src\Symbolics.Tests\Global.fs"
+
+open MathNet.Numerics
+open MathNet.Symbolics
+open Global
+
+open Operators
+open VariableSets.Alphabet
+//open Microsoft.FSharp.Quotations
+
+type Expr = SymbolicExpression
+
+Infix.parseOrUndefined "x" ==> "x"
+
+let var_x_0 = Infix.parse "x" //val var_x_0 : Result<Expression,string> = Ok (Identifier (Symbol "x"))
+let var_x = Infix.parseOrUndefined "x" //val var_x : Expression = Identifier (Symbol "x")
+let var_x_expr = SymbolicExpression(var_x)
+
+let symV = Symbol "v"
+let symW = Symbol "w"
+let symX = Symbol "x"
+let symY = Symbol "y"
+let symZ = Symbol "z"
+let eval_var_x_value = (Compile.compileExpression1OrThrow var_x_expr.Expression symX).Invoke(1.0) //error
+
+let var_x_2 = Expr.Variable("x").Expression
+let sin_of_x = Infix.parseOrUndefined "sin(x)"
+
+var_x = var_x_2 //true
+
+
+(Compile.compileExpression1OrThrow sin_of_x symX).Invoke(3.0)
+(Compile.compileExpression1OrThrow var_x symX).Invoke(3.0)
+
+
+let symExp5 = Expr.Parse("v + w + x + y + z")
+let cmpl = Compile.compileExpressionOrThrow (symExp5.Expression) [symV; symW; symX; symY; symZ] 
+cmpl.DynamicInvoke(1.0, 2.0, 3.0, 4.0, 5.0)
+
+cmpl.GetInvocationList().[0]
+cmpl.DynamicInvoke([|box 1.0; box 2.0; box 3.0; box 4.0; box 5.0|]:obj[])
+
+cmpl.GetType().FullName
+cmpl.Method.Invoke(null, [|1.0; 2.0; 3.0; 4.0; 5.0|])
+
+let ivk = cmpl.GetType().GetMethod("DynamicInvoke")
+ivk.Invoke(cmpl, [|box 1.0; box 2.0; box 3.0; box 4.0; box 5.0|])
+
+(var_x_2 + var_x_2).ToString()
+
+let parse_expr = Expr.Parse("1/(a*b)")
+parse_expr.Expression = Infix.parseOrUndefined "1/(a*b)"
+
+parse_expr.ToString()
+
+let symbols = dict[ "a", FloatingPoint.Real 2.0; "b", FloatingPoint.Real 3.0; "x", FloatingPoint.Real 6.0]
+
+// Returns 0.166666666666667
+let code_expr = SymbolicExpression(abs(1 / (-a * b)))
+let code = abs(1 / (-a * b))
+let code1_0 = abs( fromDouble 1.0)
+let code1_1 = abs( Value.fromDouble 1.0 |> Values.unpack)
+code1_0 = code1_1
+let eval_value = code_expr.Evaluate(symbols)
+var_x_expr.Evaluate(symbols)
+eval_value.RealValue
+
+Expr.Variable("a").Evaluate(symbols)
+
+
+SymbolicExpression(Pi).Evaluate(dict[]) //error
+SymbolicExpression(Pi).RealNumberValue //val it : float = 3.141592654
+
+Expr.Parse("sin(pi)").ToString()
+Expr.Parse("sin(pi)").Evaluate(dict[])
+Expr.Parse("pi").Evaluate(dict[])
+Expr.Parse("3 * j").Evaluate(dict[])
+Expr.Parse("pow(5,pow(5,2))^2").Evaluate(dict[])
+Expr.Parse("sum([1;2;3])").Evaluate(dict[]) //error
+Expr.Parse("pow(5,pow(5,a))^2").ToString()
+Expr.Parse("ttc(123)").ToString()
+SymbolicExpression(sum([fromDouble 1.0; fromDouble 2.0])).Evaluate(dict[])
+SymbolicExpression(sum([fromDouble 1.0; fromDouble 2.0])).ToString()
+Infix.format(sum([x; fromDouble 2.0; y]))
+//https://github.com/mathnet/mathnet-symbolics/issues/44
+let e3 = Infix.parseOrThrow("L+H+L+H - (L+H)")
+
+let expanded = Algebraic.expand(e3)
+Infix.format(expanded)
+
+
+let e4 = Infix.parseOrThrow("a + b - (a + b)")
+
+let expanded4 = Algebraic.expand(e4)
+Infix.format(expanded4)
+
+
+let log_test = SymbolicExpression(log (fromInt32 10) (fromDouble 100.0))
+let eval_log_test = log_test.Evaluate(symbols)
+
+symV
+
+open Definition
+define "test" ([symV; symW], (v + w)*2)
+
+SymbolicExpression(cFun("test", [x + (fromInt32 10); (fromDouble 100.0)])*2).Evaluate(dict[ "x", FloatingPoint.Real 9.0; ])
+
+
+SymbolicExpression(Infix.parseOrThrow("2^test(x, 2 * x)")).Evaluate(dict[ "x", FloatingPoint.Real 2.0; ])
+Infix.parseOrThrow("test(2 * x, 3 * x)").ToString()
+Infix.format(cFun("test", [x + (fromInt32 10); (fromDouble 100.0)])*2)
+
+let y = pow 2Q (sin(x))
+Infix.format(y)
