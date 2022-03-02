@@ -49,5 +49,9 @@ Minor internal simplifications and streamlining</PackageReleaseNotes>
     <None Include="Script.fsx" />
     <None Include="paket.references" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Tensor" Version="0.4.11" />
+    <PackageReference Include="Tensor.Algorithm" Version="0.4.11" />
+  </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>
