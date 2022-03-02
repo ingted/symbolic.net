@@ -61,7 +61,7 @@ module private InfixParser =
 
         let functionTerm = symbolName .>>. functionArgs |>> function
             | f, args ->
-                printfn "f: %s" f
+                //printfn "f: %s" f
                 if Definition.funDict.ContainsKey f then
                     VisualExpression.FunInvocation (f, BigInteger.One, args)
                 else
@@ -245,7 +245,7 @@ module Infix =
 
     [<CompiledName("ParseVisual")>]
     let parseVisual (infix: string) =
-        printfn "InfixParser.parse: %s" infix
+        //printfn "InfixParser.parse: %s" infix
         InfixParser.parse infix
 
     [<CompiledName("Parse")>]
