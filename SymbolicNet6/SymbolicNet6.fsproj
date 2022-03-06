@@ -35,6 +35,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="DiffSharp-cpu" Version="1.0.7-preview1873603133" />
+    <PackageReference Include="DiffSharp.Backends.Reference" Version="1.0.7-preview1873603133" />
+    <PackageReference Include="DiffSharp.Backends.Torch" Version="1.0.7-preview1873603133" />
+    <PackageReference Include="DiffSharp.Core" Version="1.0.7-preview1873603133" />
     <PackageReference Include="FParsec" Version="1.1.1" />
     <PackageReference Include="MathNet.Numerics" Version="5.0.0-alpha16" />
     <PackageReference Include="MathNet.Numerics.FSharp" Version="5.0.0-alpha16" />

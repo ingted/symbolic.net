@@ -6,7 +6,10 @@ open MathNet.Numerics
 open MathNet.Numerics.LinearAlgebra
 open MathNet.Symbolics
 open Definition
+open DiffSharp
 
+type TensorWrapper =
+| DSTensor of Tensor
 
 [<NoComparison>]
 type FloatingPoint =
@@ -20,7 +23,7 @@ type FloatingPoint =
     | PosInf
     | NegInf
     | ComplexInf
-    //| Tensor of Tensor<float>
+    | WTensor of TensorWrapper
 
     // Simpler usage in C#
     static member op_Implicit (x:float) = Real x
@@ -31,6 +34,7 @@ type FloatingPoint =
     static member op_Implicit (x:Vector<complex>) = ComplexVector x
     static member op_Implicit (x:Matrix<float>) = RealMatrix x
     static member op_Implicit (x:Matrix<complex>) = ComplexMatrix x
+    static member op_Implicit (x:Tensor) = WTensor <| DSTensor x
     member x.RealValue =
         match x with
         | Real x -> x
@@ -57,6 +61,10 @@ type FloatingPoint =
         match x with
         | ComplexMatrix x -> x
         | _ -> failwith "Value not convertible to a complex matrix."
+    member x.DTensorValue =
+        match x with
+        | WTensor (DSTensor x) -> x
+        | _ -> failwith "Value not convertible to a DSTensor."
 
 
 module Evaluate =

@@ -3,7 +3,7 @@
 module Definition =
 
     type DefType =
-    | DTExp of (Symbol list) * Expression
+    | DTExp of (Symbol list) * Expression //用表達式表示函數 body，symbol 是表達式中參數名
     | DTFunAction of (unit -> unit)
     | DTFunI1toI1 of (int -> int)
     | KeyWord

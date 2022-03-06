@@ -40,10 +40,10 @@ module Exponential =
                 | Product _ | Power _ as p -> exp (rules p)
                 | p -> exp p
             | Product ax ->
-                let f (p,s) = function | Function (Exp, a) -> (p,s+a) | a -> (p*a,s)
+                let f (p:Expression,s:Expression) = function | Function (Exp, a) -> (p,s+a) | a -> (p*a,s)
                 let p, s = List.fold f (one, zero) ax in p * exp s
             | Sum ax ->
-                let f s = function
+                let f (s:Expression) = function
                     | Product _
                     | Power _ as a -> s+(rules a)
                     | a -> s+a

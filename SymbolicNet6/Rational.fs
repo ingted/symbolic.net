@@ -45,7 +45,7 @@ module Rational =
         let cf = Polynomial.commonMonomialFactors [ncf; dcf]
         if isOne cf then x else (Algebraic.expand (n/cf))/(Algebraic.expand (d/cf))
 
-    let rec private rationalizeSum d x y =
+    let rec private rationalizeSum (d:Expression) x y =
         let a = denominator x
         let b = denominator y
         if isOne a && isOne b then (x+y)/d
