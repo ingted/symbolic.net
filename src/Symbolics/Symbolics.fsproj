@@ -1,8 +1,7 @@
-<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <TargetFrameworks>net6.0</TargetFrameworks>
     <AssemblyName>MathNet.Symbolics</AssemblyName>
     <RootNamespace>MathNet.Symbolics</RootNamespace>
     <IsPackable>true</IsPackable>
@@ -47,11 +46,10 @@ Minor internal simplifications and streamlining</PackageReleaseNotes>
     <Compile Include="SymbolicExpression.fs" />
     <Compile Include="VariableSets.fs" />
     <None Include="Script.fsx" />
-    <None Include="paket.references" />
+    <!--<None Include="paket.references" />-->
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Tensor" Version="0.4.11" />
-    <PackageReference Include="Tensor.Algorithm" Version="0.4.11" />
+    <PackageReference Include="System.Runtime.Numerics" Version="4.3.0" />
   </ItemGroup>
-  <Import Project="..\..\.paket\Paket.Restore.targets" />
+  <!--<Import Project="..\..\.paket\Paket.Restore.targets" />-->
 </Project>

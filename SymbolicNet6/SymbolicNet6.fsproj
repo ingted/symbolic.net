@@ -1,0 +1,48 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+      <Compile Include="Symbols.fs" />
+      <Compile Include="Approximation.fs" />
+      <Compile Include="Value.fs" />
+      <Compile Include="Expression.fs" />
+      <Compile Include="Definition.fs" />
+      <Compile Include="Numbers.fs" />
+      <Compile Include="Structure.fs" />
+      <Compile Include="Algebraic.fs" />
+      <Compile Include="Calculus.fs" />
+      <Compile Include="Polynomial.fs" />
+      <Compile Include="Rational.fs" />
+      <Compile Include="Exponential.fs" />
+      <Compile Include="Trigonometric.fs" />
+      <Compile Include="Approximate.fs" />
+      <Compile Include="Enriched\EnrichedExpression.fs" />
+      <Compile Include="Visual\VisualExpression.fs" />
+      <Compile Include="Visual\Infix.fs" />
+      <Compile Include="Visual\LaTeX.fs" />
+      <Compile Include="Visual\MathML.fs" />
+      <Compile Include="Typed\TypedExpression.fs" />
+      <Compile Include="Typed\Quotations.fs" />
+      <Compile Include="Typed\Linq.fs" />
+      <Compile Include="Compile.fs" />
+      <Compile Include="Evaluate.fs" />
+      <Compile Include="SymbolicExpression.fs" />
+      <Compile Include="VariableSets.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FParsec" Version="1.1.1" />
+    <PackageReference Include="MathNet.Numerics" Version="5.0.0-alpha16" />
+    <PackageReference Include="MathNet.Numerics.FSharp" Version="5.0.0-alpha16" />
+    <PackageReference Include="System.Runtime.Numerics" Version="4.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="FSharp.Core" Version="6.0.3" />
+  </ItemGroup>
+
+</Project>
