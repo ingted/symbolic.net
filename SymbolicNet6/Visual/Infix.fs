@@ -6,6 +6,8 @@ open MathNet.Symbolics
 
 
 module private InfixParser =
+    //#r @"nuget:FParsec"
+    //#r @"nuget:MathNet.Symbolics"
 
     open FParsec
     open Microsoft.FSharp.Core

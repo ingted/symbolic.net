@@ -49,8 +49,19 @@ module MatrixVector =
         let symW = Symbol "w"
         let _ = define "test" ([symV; symW], (v + w)*2)
         Infix.parseOrThrow("test(a+1, a*2)") ==> "test(1 + a,2*a)"
+        Infix.parseOrThrow("test(a+1, a + a) + test(a+1, a*2)") ==> "2*test(1 + a,2*a)"
+
         (fun () -> Infix.parseOrThrow("test1(a+1, a*2)") |> ignore)
             |> should KeyNotFoundException keyNotFoundType
 
         //(fun () -> Evaluate.evaluate symbols (f) |> ignore) |> should (throwWithMessage "Failed to find symbol f") typeof<System.Exception>
         //System.Collections.Generic.KeyNotFoundException : The given key was not present in the dictionary.
+
+        let expr001 = Expr.Parse("htensor(list_of(list_of(list_of(vec(1,2,3), vec(4,5,6)), list_of(vec(7,8,9), vec(10,11,12)))))")
+        let s001 = expr001.ToString()
+        printfn "s001: %s" s001
+        expr001.Expression ==> "htensor(list_of(list_of(list_of(vec(1,2,3),vec(4,5,6)),list_of(vec(7,8,9),vec(10,11,12)))))"
+
+
+        let eval001 = expr001.Evaluate(dict[])
+        ()

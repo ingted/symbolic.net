@@ -21,7 +21,7 @@
       <Compile Include="Compilation\Compilation.fs" />
       <Compile Include="SymbolicExpressions.fs" />
       <Compile Include="Tests.fs" />
-      <Compile Include="MatrixVector\BasicFunctionalityTest.fs" />
+      <Compile Include="MatrixVectorTensor\BasicFunctionalityTest.fs" />
       <Compile Include="Main.fs" />
   </ItemGroup>
 

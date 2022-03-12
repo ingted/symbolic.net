@@ -10,9 +10,10 @@ open DiffSharp
 
 type TensorWrapper =
 | DSTensor of Tensor
+| VecInTensor of Vector<float>
+| ListOf of TensorWrapper list
 
-[<NoComparison>]
-type FloatingPoint =
+and [<NoComparison>] FloatingPoint =
     | Real of float
     | Complex of complex
     | RealVector of Vector<float>
@@ -68,6 +69,89 @@ type FloatingPoint =
 
 
 module Evaluate =
+
+    let rec listOf2Obj ((wt0:TensorWrapper), (shape:int list)) : float [] * (int list) =
+        match wt0 with
+        | VecInTensor v ->
+            let s = v.Count::shape
+            printfn "v.Count: %d" v.Count
+            v.AsArray(), s
+        | ListOf lo ->
+            let s = lo.Length::shape
+            printfn "twl.Length: %d" lo.Length
+            let inner =
+                    lo
+                    |> List.map (fun twli ->
+                        listOf2Obj (twli, s)
+                    )
+            let ss = snd inner.[0]
+            let vl =
+                inner
+                |> List.collect (fun vi ->
+                   let veci = fst vi
+                   veci
+                   |> List.ofArray
+                )
+            vl |> Array.ofList, ss
+
+    let listOf2DSTensor (wt0:TensorWrapper) =
+        let fArray, shapeReversed = listOf2Obj (wt0, [])
+        dsharp.view ((dsharp.tensor fArray), shapeReversed |> Seq.rev)
+
+    //module orz = 
+    //    type A =
+    //    | AV of int list
+    //    | AL of A list
+
+
+    //    let rec listOf2Obj1 (wt0:A) =
+    //        match wt0 with
+    //        | AL twl ->
+    //            let inner = twl |> List.map listOf2Obj1
+    //            let itm0 = inner.[0] |> box
+    //            match itm0 with
+    //            | :? (A list) as al ->
+    //                al |> List.collect (fun ali ->
+    //                    listOf2Obj1 ali
+    //                    )
+    //            | :? (int list) as il -> il
+                
+    //        | AV v -> v
+
+    //    let rec listOf2Obj ((wt0:A), (shape:int list)) : (int list) * (int list) =
+    //        match wt0 with
+    //        | AV v ->
+    //            let s = v.Length::shape
+    //            printfn "v.Length: %d" v.Length
+    //            v, s
+    //        | AL twl ->
+    //            let s = twl.Length::shape
+    //            printfn "twl.Length: %d" twl.Length
+    //            let inner =
+    //                twl
+    //                |> List.map (fun twli ->
+    //                    listOf2Obj (twli, s)
+    //                )
+    //            let ss = snd inner.[0]
+    //            (inner |> List.collect fst), ss
+
+    //    listOf2Obj (AL [
+    //                    AL [
+    //                        AL [
+    //                            AV [123; 345; 999]
+    //                            ];
+    //                        AL [
+    //                            AV [1230; 3450; 888]
+    //                            ];
+    //                        AL [
+    //                            AV [123; 345; 777]
+    //                            ];
+    //                        AL [
+    //                            AV [1230; 3450; 666]
+    //                            ]
+    //                        ]
+    //                    ], [])
+
 
     let (|Infinity|_|) = function
         | PosInf | NegInf | ComplexInf -> Some Infinity
@@ -299,6 +383,17 @@ module Evaluate =
                     | _ -> failwithf "vector parameter is required for %s" fnm
                 )
                 |> Array.ofList
+
+            let cal_param_list_of_vec_val () : TensorWrapper list =
+                xs
+                |> List.map (fun exp ->
+                    let evalrst = evaluate symbols exp
+                    match evalrst with
+                    | (FloatingPoint.RealVector v) -> VecInTensor v //計算結果WTensor                    
+                    | (FloatingPoint.WTensor tw) ->  tw
+                    | _ -> failwithf "vector or WTensor parameter is required for %s" fnm
+                )
+
             if keyWord.ContainsKey fnm then
                 let mbr () =
                     let param_val = cal_param_vec_val ()
@@ -309,6 +404,12 @@ module Evaluate =
                     )
                     m2
                 match fnm with
+                | "lo"
+                | "list_of" -> //無法知道自己是否是最上層，所以不能回傳 tensor
+                    //htensor(list_of(list_of(list_of(vec(), vec()), list_of(vec(), vec()))))
+                    let param_val = cal_param_list_of_vec_val ()
+                    WTensor <| ListOf param_val
+                    //failwithf "haven't yet implemented"
                 | "vec" ->
                     let param_val = cal_param_real_val ()
                     RealVector <| vector param_val
@@ -317,19 +418,12 @@ module Evaluate =
                 | "mat_by_col" ->
                     let m2 = mbr()
                     RealMatrix <| m2.Transpose()
-                | "htensor" ->
-                    //let param_val = cal_param_vec_val ()
-                    //let ht =
-                    //    if param_val.Length > 1 then
-                    //        HostTensor.ofSeqWithShape (param_val.[1].AsArray()) (param_val.[0].AsArray())
-                    //    else
-                    //        HostTensor.ofSeq (param_val.[0])
-                    //Tensor ht
-                    failwithf "haven't yet implemented"
-                | "sym_htensor" ->
-                    //let param_val = cal_param_vec_val ()
-                    failwithf "haven't yet implemented"
-                | "ctensor" ->
+                | "htensor" -> //可以知道自己是最上層，回傳 tensor
+                    let param_val = cal_param_list_of_vec_val ()
+                    if param_val.Length <> 1 then                        
+                        failwithf "htensor only take single list_of expression as input"
+                    WTensor (DSTensor <| listOf2DSTensor param_val.[0])
+                | "gtensor" ->
                     failwithf "haven't yet implemented"
                 | "sym_ctensor" ->
                     failwithf "haven't yet implemented"

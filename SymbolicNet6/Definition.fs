@@ -11,8 +11,10 @@ module Definition =
     let funDict = new System.Collections.Concurrent.ConcurrentDictionary<string, DefType>()
 
     let kwlist = [ "vec", true; "mat_by_row", true; "mat_by_col", true; "mat_multiply", true;
-                   "htensor", true; "sym_htensor", true;
-                   "ctensor", true; "sym_ctensor", true 
+                   "htensor", true; 
+                   "gtensor", true;
+                   "list_of", true; "lo", true;
+                   "htensor", true
                    ]
 
     let keyWord = dict kwlist

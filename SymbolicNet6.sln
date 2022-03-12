@@ -7,10 +7,12 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "SymbolicNet6", "SymbolicNet
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "SymbolicNet6.Tests", "SymbolicNet6.Test\SymbolicNet6.Tests.fsproj", "{B8A0DD59-2D8C-4D7C-9925-D7310DE6965B}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "debuggerNet6", "debuggerNet6\debuggerNet6.fsproj", "{42040346-F952-49D2-BCE4-50B44965E3DC}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "debuggerNet6", "debuggerNet6\debuggerNet6.fsproj", "{42040346-F952-49D2-BCE4-50B44965E3DC}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Misc", "Misc", "{2EF66F82-4FD8-46D5-9C25-E2BF70700E11}"
 	ProjectSection(SolutionItems) = preProject
+		DiffSharp.fsx = DiffSharp.fsx
+		DiffSharp.ipynb = DiffSharp.ipynb
 		Scripts\Strategy.fsx = Scripts\Strategy.fsx
 	EndProjectSection
 EndProject
@@ -21,6 +23,7 @@ Global
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{8B440313-E058-4C1C-9F11-F088ED811117}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B440313-E058-4C1C-9F11-F088ED811117}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8B440313-E058-4C1C-9F11-F088ED811117}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8B440313-E058-4C1C-9F11-F088ED811117}.Release|Any CPU.Build.0 = Release|Any CPU
 		{B8A0DD59-2D8C-4D7C-9925-D7310DE6965B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
