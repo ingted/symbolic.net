@@ -389,7 +389,8 @@ module Evaluate =
                 |> List.map (fun exp ->
                     let evalrst = evaluate symbols exp
                     match evalrst with
-                    | (FloatingPoint.RealVector v) -> VecInTensor v //計算結果WTensor                    
+                    | (FloatingPoint.RealVector v) ->
+                        VecInTensor v //計算結果WTensor                    
                     | (FloatingPoint.WTensor tw) ->  tw
                     | _ -> failwithf "vector or WTensor parameter is required for %s" fnm
                 )
@@ -421,8 +422,14 @@ module Evaluate =
                 | "htensor" -> //可以知道自己是最上層，回傳 tensor
                     let param_val = cal_param_list_of_vec_val ()
                     if param_val.Length <> 1 then                        
-                        failwithf "htensor only take single list_of expression as input"
+                        failwithf "htensor only takes single list_of expression as input"
                     WTensor (DSTensor <| listOf2DSTensor param_val.[0])
+                //| "htensor2" -> //可以知道自己是最上層，回傳 tensor
+                //    let param_val = cal_param_list_of_vec_val ()
+                //    if param_val.Length <> 2 then                        
+                //        failwithf "htensor2 takes 2 list_of expression as input"
+                //    let v1 = param_val.[0]
+                //    WTensor (DSTensor <| listOf2DSTensor )
                 | "gtensor" ->
                     failwithf "haven't yet implemented"
                 | "sym_ctensor" ->
@@ -475,6 +482,15 @@ module Evaluate =
                 | DTFunI1toI1 f ->
                     let param_val = cal_param_real_val ()
                     f (int param_val.[0]) |> float |> Real
-            
-
+                | DTFunF2toV1 f ->
+                    let param_val = cal_param_real_val ()
+                    f param_val.[0] param_val.[1] |> RealVector
+                | DTCurF2toV1 (f, (Symbol sym)) ->
+                    let param_val = cal_param_real_val ()
+                    let cur = symbols.[sym].RealValue
+                    f cur param_val.[0] param_val.[1] |> RealVector
+                | DTCurF3toV1 (f, (Symbol sym)) ->
+                    let param_val = cal_param_real_val ()
+                    let cur = symbols.[sym].RealValue
+                    f cur param_val.[0] param_val.[1] param_val.[2] |> RealVector
 

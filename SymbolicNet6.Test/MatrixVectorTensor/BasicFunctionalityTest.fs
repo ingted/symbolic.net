@@ -13,6 +13,7 @@ open Definition
 
 open System
 open MathNet.Numerics.LinearAlgebra
+open DiffSharp
 
 
 module MatrixVector =
@@ -58,10 +59,18 @@ module MatrixVector =
         //System.Collections.Generic.KeyNotFoundException : The given key was not present in the dictionary.
 
         let expr001 = Expr.Parse("htensor(list_of(list_of(list_of(vec(1,2,3), vec(4,5,6)), list_of(vec(7,8,9), vec(10,11,12)))))")
+        let expr002 = Expr.Parse("htensor(lo(lo(lo(vec(1,2,3), vec(4,5,6)), lo(vec(7,8,9), vec(10,11,12)))))")
         let s001 = expr001.ToString()
         printfn "s001: %s" s001
         expr001.Expression ==> "htensor(list_of(list_of(list_of(vec(1,2,3),vec(4,5,6)),list_of(vec(7,8,9),vec(10,11,12)))))"
 
 
         let eval001 = expr001.Evaluate(dict[])
+        let eval002 = expr002.Evaluate(dict[])
+        eval001 |> shouldEqual eval002
+
+
+        dsharp.view (dsharp.tensor [1.0; 2.0; 3.0; 4.0; 5.0; 6.0; 7.0; 8.0; 9.0; 10.0; 11.0; 12.0], [1;2;2;3])
+        |> shouldEqual eval001.DTensorValue
+
         ()

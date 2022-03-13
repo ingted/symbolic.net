@@ -120,6 +120,9 @@ type SymbolicExpression(expression:Expression) =
     static member Parse(infix:string) : SymbolicExpression =
         SymbolicExpression(Infix.parseOrThrow infix)
 
+    static member XParse(infix:string) : Expression =
+        SymbolicExpression(Infix.parseOrThrow infix).Expression
+
     static member ParseMathML(mathml:string) : SymbolicExpression =
         SymbolicExpression(MathML.parse mathml)
 

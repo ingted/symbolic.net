@@ -10,7 +10,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\SymbolicNet6\SymbolicNet6.fsproj" />
+    <ProjectReference Include="..\SymbolicNet6\SymbolicNet6.fsproj" />
   </ItemGroup>
     <ItemGroup>
         <PackageReference Update="FSharp.Core" Version="6.0.3" />

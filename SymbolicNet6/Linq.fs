@@ -5,14 +5,19 @@ open MathNet.Symbolics
 open MathNet.Numerics
 open System.Linq.Expressions
 
+
 open ExpressionPatterns
 open Operators
+//open Evaluate
 
 [<RequireQualifiedAccess>]
 module Linq =
 
     module Option =
         let map2 f a b = a |> Option.bind (fun a' -> b |> Option.map (fun b' -> f a' b'))
+
+    type ExprHelper = 
+        static member Quote(e:Expression<System.Func<int, _>>) = e
 
     [<CompiledName("Parse")>]
     let rec parse (q:Expression) : MathNet.Symbolics.Expression =
@@ -39,6 +44,14 @@ module Linq =
         | NegPower (r, p) -> r ** -p
         | Product ax -> product <| List.map denominator ax
         | _ -> one
+
+    let rec translateExpr (linq:Expression) = 
+        match linq with
+        | :? MethodCallExpression as mc ->
+            let le = mc.Arguments.[0] :?> LambdaExpression
+            let args, body = translateExpr le.Body
+            le.Parameters.[0] :: args, body
+        | _ -> [], linq
 
     let private toLambda (expr : MathNet.Symbolics.Expression) (args : Symbol list) (valueType : Type) (mathType : Type) constant value add mul div pow atan2 log abs besselj bessely besseli besselk besseliratio besselkratio hankelh1 hankelh2 : LambdaExpression option =
         let valueTypeArr1 = [| valueType |]
@@ -180,6 +193,8 @@ module Linq =
                     let nExp = compileFraction n
                     let dExp = compileFraction d
                     Option.map2 div nExp dExp
+            | FunInvocation (Symbol fnm, xs) ->
+                None
             | Undefined -> None
         and compileFraction = function
             | Product(xs) ->
