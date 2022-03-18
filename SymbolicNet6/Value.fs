@@ -2,6 +2,8 @@
 
 open System
 open MathNet.Numerics
+open MathNet.Numerics.LinearAlgebra
+open DiffSharp
 
 type BigInteger = System.Numerics.BigInteger
 
@@ -14,6 +16,12 @@ type Value =
     | PositiveInfinity
     | NegativeInfinity
     | Undefined
+    | RealVec of Vector<float>
+    | ComplexVec of Vector<complex>
+    | RealMat of Matrix<float>
+    | ComplexMat of Matrix<complex>
+    | DSTen of Tensor
+    
 
 [<RequireQualifiedAccess>]
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

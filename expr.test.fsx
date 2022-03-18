@@ -100,3 +100,8 @@ type ExprHelper2 =
 
 let expr5 = ExprHelper2.Quote(fun () -> 123)
 expr5.Compile().Invoke()
+
+
+expr5.Reduce() :?> LambdaExpression
+
+

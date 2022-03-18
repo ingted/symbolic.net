@@ -8,50 +8,32 @@
 #r "nuget: DiffSharp.Core, 1.0.7-preview1873603133"
 #r "nuget: DiffSharp.Backends.Reference, 1.0.7-preview1873603133"
 #r "nuget: DiffSharp.Backends.Torch, 1.0.7-preview1873603133"
-#I @"..\SymbolicNet6"
-#load @".\Symbols.fs"
-#load @".\Approximation.fs"
-#load @".\Value.fs"
-#load @".\Expression.fs"
-//#load @".\Evaluate.fsi"
-#load @".\Definition.fs"
-#load @".\Numbers.fs"
-#load @".\Structure.fs"
-#load @".\Algebraic.fs"
-#load @".\Calculus.fs"
-#load @".\Polynomial.fs"
-#load @".\Rational.fs"
-#load @".\Exponential.fs"
-#load @".\Trigonometric.fs"
-#load @".\Approximate.fs"
-#load @".\Enriched\EnrichedExpression.fs"
-#load @".\Visual\VisualExpression.fs"
-#load @".\Visual\Infix.fs"
-#load @".\Visual\LaTeX.fs"
-#load @".\Visual\MathML.fs"
-#load @".\Typed\TypedExpression.fs"
-#load @".\Typed\Quotations.fs"
-#load @".\Linq.fs"
-#load @".\Compile.fs"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#load @".\Evaluate.fs"
+//#I @"..\SymbolicNet6"
+//#load @".\Symbols.fs"
+//#load @".\Approximation.fs"
+//#load @".\Value.fs"
+//#load @".\Expression.fs"
+////#load @".\Evaluate.fsi"
+//#load @".\Definition.fs"
+//#load @".\Numbers.fs"
+//#load @".\Structure.fs"
+//#load @".\Algebraic.fs"
+//#load @".\Calculus.fs"
+//#load @".\Polynomial.fs"
+//#load @".\Rational.fs"
+//#load @".\Exponential.fs"
+//#load @".\Trigonometric.fs"
+//#load @".\Approximate.fs"
+//#load @".\Enriched\EnrichedExpression.fs"
+//#load @".\Visual\VisualExpression.fs"
+//#load @".\Visual\Infix.fs"
+//#load @".\Visual\LaTeX.fs"
+//#load @".\Visual\MathML.fs"
+//#load @".\Typed\TypedExpression.fs"
+//#load @".\Typed\Quotations.fs"
+//#load @".\Linq.fs"
+//#load @".\Compile.fs"
+//#load @".\Evaluate.fs"
 #load @"..\src\Symbolics.Tests\Global.fs"
 
 open MathNet.Numerics
@@ -83,6 +65,14 @@ SymbolicExpression(cFun("test", [x + (fromInt32 10); (fromDouble 100.0)])*2).Eva
 
 let symbolsd = dict[ "x", FloatingPoint.Real 9.0; ]
 SymbolicExpression(cFun("test1", [x + (fromInt32 10); (fromDouble 100.0)])*2).Evaluate(symbolsd)
+
+
+let syml = dict[ "x", FloatingPoint.Real 9.0; ]
+define "t0" ([symV; symW], (v + w))
+SymbolicExpression(cFun("t0", [x; x])).Evaluate(syml)
+define "t1" ([symV; symW], Infix.parseOrThrow("t0(v, w)"))
+SymbolicExpression(cFun("t1", [x; x])).Evaluate(syml)
+
 
 
 Infix.parseOrThrow("test(2 * x, 3 * x)").ToString()
