@@ -21,6 +21,28 @@ type Value =
     | RealMat of Matrix<float>
     | ComplexMat of Matrix<complex>
     | DSTen of Tensor
+    with 
+        static member (+) (vl : Value, vr : Value) =
+            match vl with
+            | Number vlv ->
+                match vr with
+                | Number vrv ->
+                    vlv * vrv
+        static member (*) (vl : Value, vr : float) =
+            match vl with
+            | Approximation (Real vlv) ->
+                vlv * vr
+        static member (+) (vl : Value, vr : float) =
+            match vl with
+            | Approximation (Real vlv) ->
+                vlv + vr
+        static member (+) (vl : float, vr : Value) =
+            match vr with
+            | Approximation vrv ->
+                match vrv with
+                | Approximation.Real vrvv ->
+                    vl + vrvv
+
     
 
 [<RequireQualifiedAccess>]

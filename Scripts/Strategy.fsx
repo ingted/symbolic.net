@@ -53,9 +53,59 @@ let symZ = Symbol "z"
 
 open Definition
 
+open System.Linq.Expressions
 
+[<RequireQualifiedAccess>]
+type Value =
+    | Number of BigRational
+    | Approximation of Approximation
+    | ComplexInfinity
+    | PositiveInfinity
+    | NegativeInfinity
+    | Undefined
+    with 
+        static member (+) (vl : Value, vr : Value) =
+            match vl with
+            | Number vlv ->
+                match vr with
+                | Number vrv ->
+                    vlv * vrv
+        static member (*) (vl : Value, vr : float) =
+            match vl with
+            | Approximation (Real vlv) ->
+                vlv * vr
+        static member (+) (vl : Value, vr : float) =
+            match vl with
+            | Approximation (Real vlv) ->
+                vlv + vr
+        static member (+) (vl : float, vr : Value) =
+            match vr with
+            | Approximation vrv ->
+                match vrv with
+                | Approximation.Real vrvv ->
+                    vl + vrvv
 
+let addB = Expression.Parameter(typeof<System.Double>, "b")
+let addC = Expression.Parameter(typeof<MathNet.Symbolics.Value>, "c")
 
+Expression.Add(
+            addB,
+            addC
+        )
+
+typeof<float> = typeof<System.Double>
+
+let mutable o = [|1;2;3|]
+
+let changeIt (o:int[]) =
+    o.[2] <- 0
+
+changeIt o
+
+let changeIt2 (o:int[]) =
+    o <- [||]
+
+changeIt2 o
 
 define "test" ([symV; symW], (v + w)*2)
 define "test1" ([symV; symW], Infix.parseOrThrow("test(v, w)"))
@@ -63,11 +113,11 @@ SymbolicExpression(Infix.parseOrThrow("2^test(x, 2 * x)")).Evaluate(dict[ "x", F
 
 SymbolicExpression(cFun("test", [x + (fromInt32 10); (fromDouble 100.0)])*2).Evaluate(dict[ "x", FloatingPoint.Real 9.0; ])
 
-let symbolsd = dict[ "x", FloatingPoint.Real 9.0; ]
+let symbolsd = dict [ "x", FloatingPoint.Real 9.0; ]
 SymbolicExpression(cFun("test1", [x + (fromInt32 10); (fromDouble 100.0)])*2).Evaluate(symbolsd)
 
 
-let syml = dict[ "x", FloatingPoint.Real 9.0; ]
+let syml = dict [ "x", FloatingPoint.Real 9.0; ]
 define "t0" ([symV; symW], (v + w))
 SymbolicExpression(cFun("t0", [x; x])).Evaluate(syml)
 define "t1" ([symV; symW], Infix.parseOrThrow("t0(v, w)"))
@@ -83,11 +133,11 @@ Infix.format(y)
 
 
 def1ito1i "orz" (fun x -> 3*x)
-SymbolicExpression(Infix.parseOrThrow("orz(2 * x)")).Evaluate(dict[ "x", FloatingPoint.Real 2.0; ])
+SymbolicExpression(Infix.parseOrThrow("orz(2 * x)")).Evaluate(dict [ "x", FloatingPoint.Real 2.0; ])
 
 let e5 = Infix.parseOrThrow("orz(2 * x - 2 * x) + a + b - (a + b)")
 
-let expanded5 = SymbolicExpression(Algebraic.expand(e5)).Evaluate(dict[])
+let expanded5 = SymbolicExpression(Algebraic.expand(e5)).Evaluate(dict [])
 
 open System.Linq.Expressions
 
