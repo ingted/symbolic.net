@@ -14,6 +14,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Misc", "Misc", "{2EF66F82-4
 		DiffSharp.fsx = DiffSharp.fsx
 		DiffSharp.ipynb = DiffSharp.ipynb
 		expr.test.fsx = expr.test.fsx
+		linqExpTest.20220320.fsx = linqExpTest.20220320.fsx
 		linqExpTest.fsx = linqExpTest.fsx
 		Scripts\Strategy.fsx = Scripts\Strategy.fsx
 	EndProjectSection
