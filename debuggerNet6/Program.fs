@@ -61,13 +61,18 @@ let main argv =
 
     let infix3_0 = Infix.parseOrThrow("t0(x, x)")
     let infix3_1 = Infix.parseOrThrow("t1(x, x)")
+    let infix3_2 = Infix.parseOrThrow("t2(x, x * 2)")
     let infix3 = Infix.parseOrThrow("2 * t2(x, x) / 3 + t2(x, x * 2)")
 
 
     let (Some lambdaExp3_0) = MathNet.Symbolics.Linq.formatLambda infix3_0 [symX]
+    let (Some lambdaExp3_2) = MathNet.Symbolics.Linq.formatLambda infix3_2 [symX]
     let (Some lambdaExp3) = MathNet.Symbolics.Linq.formatLambda infix3 [symX]
 
-    printfn "2 * t2(x, x) / 3 + t2(x, x * 2): %A" <| SymbolicExpression.Parse("2 * t2(x, x) / 3 + t2(x, x * 2)").Evaluate(syml)
+    let toEvaluate = SymbolicExpression.Parse("2 * t2(x, x) / 3 + t2(x, x * 2)")
+    let (Some toLambda) = MathNet.Symbolics.Linq.formatLambda toEvaluate.Expression [symX]
+
+    printfn "2 * t2(x, x) / 3 + t2(x, x * 2): %A" <| toEvaluate.Evaluate(syml)
     printfn "t1(x, 2 * t0(x,x)): %A" <| SymbolicExpression(cFun("t1", [x; 2 * cFun("t0", [x; x])])).Evaluate(syml)
     printfn "t1(x, 2 * t1(x,x)): %A" <| SymbolicExpression(cFun("t1", [x; 2 * cFun("t1", [x; x])])).Evaluate(syml)
     printfn "t0(x, t0(x, x) * 2): %A" <| SymbolicExpression(cFun("t0", [x; cFun("t0", [x; x]) * 2])).Evaluate(syml)
