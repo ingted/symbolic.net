@@ -2,6 +2,35 @@ open System
 open System.Collections.Generic
 open System.Linq.Expressions
 
+type TTC = {
+    oorz:int
+}
+    with
+        static member op_Implicit (x:int) = {oorz=x}
+        static member (+) (l:TTC, r:int) = l.oorz + r
+
+int {oorz=123}
+
+123 :?> TTC
+
+let inline (!>) (x:^a) : ^b = ((^a or ^b) : (static member op_Implicit : ^a -> ^b) x)
+
+type A() = class end
+type B() = 
+    static member op_Implicit(a:A) = B()
+    member this.Add x y = x + y
+
+let show (b: B) = b.Add
+
+let res = show (!> A()) 1 2
+
+let inline implicit arg =
+  ( ^a : (static member op_Implicit : ^b -> ^a) arg)
+
+let (!>) : A -> B = implicit
+
+let res = show (implicit (A())) 1 2
+let ir:TTC = implicit 123
 
 let paramA = Expression.Parameter(typeof<string>, "a")
 
@@ -12,12 +41,20 @@ let expr : Expression<Func<string, bool>> =
     ExprHelper<Func<string, bool>>.Quote (fun b -> b = "Something")
 
 
+let exprCasting : Expression<Func<int, obj>> =
+    ExprHelper<Func<int, obj>>.Quote (fun b -> box b)
+
+(exprCasting:>Expression:?>LambdaExpression).Body.GetType().FullName
+
 Expression.Lambda(
     Expression.Invoke(expr, paramA),
     paramA
 )
-
-
+let paramI = Expression.Parameter(typeof<int>, "i")
+Expression.Lambda(
+    (Expression.Convert(paramI, typeof<obj>))
+    ,paramI
+    ).Compile().DynamicInvoke(1)
 
 open Microsoft.FSharp.Linq.RuntimeHelpers
 open System

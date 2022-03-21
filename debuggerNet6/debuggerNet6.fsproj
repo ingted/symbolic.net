@@ -6,6 +6,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="Program.fs.20220320" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 

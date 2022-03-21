@@ -137,20 +137,7 @@ module Linq =
         | _ -> [], linq
 
     type 'T rc = Collections.ObjectModel.ReadOnlyCollection<'T>
-    //let inline visitor1 (b:^T when ^T:(member Body:Expression) and ^T:(member Parameters:ParameterExpression rc) ) =
-    //    { new ExpressionVisitor() with
-    //        member __.VisitParameter _ = (^T:(member Body:Expression) b)
-    //        member __.VisitLambda x =
-    //            let visitedBody = base.Visit x.Body
-    //            Expression.Lambda(visitedBody, (^T:(member Parameters:ParameterExpression rc) b)) :> Expression
-    //        }
-    //let inline visitor2 (b:Expression) (P:ParameterExpression[]) =
-    //    { new ExpressionVisitor() with
-    //        member __.VisitParameter _ = b
-    //        member __.VisitLambda x =
-    //            let visitedBody = base.Visit x.Body
-    //            Expression.Lambda(visitedBody, P) :> Expression
-    //        }
+
     type Expression with
         member this.LambdaExprFindSingleParam() =
             (this :?> LambdaExpression).Parameters.[0]
@@ -159,36 +146,39 @@ module Linq =
         member this.LambdaBody() =
             (this :?> LambdaExpression).Body
 
+    let exprObj2ValueToInject = //: Expression<Func<obj, MathNet.Symbolics.Value>> =
+        ExprHelper.Quote<Func<obj, MathNet.Symbolics.Value>> (fun j ->
+            match j with
+            | _ when j.GetType() = typeof<float> ->
+                //failwith "orz"
+                //MathNet.Symbolics.Value.fromDouble  0.0
+                Value.Approximation (Approximation.Real (j :?> float))
+            | :? Vector<float> ->
+                Value.RealVec (j :?> Vector<float>)
+            | :? Matrix<float> ->
+                Value.RealMat (j :?> Matrix<float>)
+            )
+            :> Expression :?> LambdaExpression
+
+
+
     let visitorP (paramIdx:int) (b:Expression) (p:ParameterExpression[]) =
         { new ExpressionVisitor() with
             member __.VisitParameter param =
                 if p.Length > paramIdx then
                     if param.Name = p.[paramIdx].Name then
-                        b
+                        let casted = Expression.Convert(b, typeof<obj>) :> Expression
+                        let ivk = Expression.Invoke(exprObj2ValueToInject, [|casted|])
+                        ivk
                     else
                         param
                 else
                     param
             member __.VisitLambda x =
                 let visitedBody = base.Visit x.Body
-                //let pp =
-                //    p
-                //    |> Seq.mapi (fun i po ->
-                //        if i = paramIdx then
-                //            None
-                //        else
-                //            Some po
-                //    )
-                //    |> Seq.choose id
-                    
-                Expression.Lambda(visitedBody, p) :> Expression
+                Expression.Lambda(visitedBody, p)
             }
 
-    //type MyExpressionVisitor() =
-    //    inherit ExpressionVisitor() with
-
-    //        member this.ValidateBinary(before: BinaryExpression, after:BinaryExpression) =
-    //            after
             
 
     let visitorAllP (inject:Expression) (newParams:ParameterExpression[]) f =
@@ -252,19 +242,6 @@ module Linq =
                                     )
                                     |> Seq.toArray) param_handler).Visit expr
 
-    let exprObj2ValueToInject = //: Expression<Func<obj, MathNet.Symbolics.Value>> =
-        ExprHelper.Quote<Func<obj, MathNet.Symbolics.Value>> (fun j ->
-            match j with
-            | _ when j.GetType() = typeof<float> ->
-                //failwith "orz"
-                //MathNet.Symbolics.Value.fromDouble  0.0
-                Value.Approximation (Approximation.Real (j :?> float))
-            | :? Vector<float> ->
-                Value.RealVec (j :?> Vector<float>)
-            | :? Matrix<float> ->
-                Value.RealMat (j :?> Matrix<float>)
-            )
-            :> Expression :?> LambdaExpression
 
     let replaceType pNm (expr:LambdaExpression) =
         let param_exp_replace =
@@ -309,7 +286,7 @@ module Linq =
 
 
 
-    let private toLambda (expr : MathNet.Symbolics.Expression) (args : Symbol list) (valueType : Type) (mathType : Type) constant value add mul div pow atan2 log abs besselj bessely besseli besselk besseliratio besselkratio hankelh1 hankelh2 : LambdaExpression option =
+    let rec toLambda (expr : MathNet.Symbolics.Expression) (args : Symbol list) (valueType : Type) (mathType : Type) constant value add mul div pow atan2 log abs besselj bessely besseli besselk besseliratio besselkratio hankelh1 hankelh2 : LambdaExpression option =
         let valueTypeArr1 = [| valueType |]
         let valueTypeArr2 = [| valueType; valueType |]
         
@@ -461,6 +438,9 @@ module Linq =
                 let fBody = Definition.funDict.[fnm]
                 match fBody with
                 | DTExp (param, bodyDef) ->
+
+                    let (Some exprBy2Lambda) = formatLambda bodyDef param
+
                     let expParam =
                         param
                         |> Seq.map (fun (Symbol s) ->
@@ -490,20 +470,21 @@ module Linq =
                             else
                                 p
                             :> Expression
-                        )).Visit (lambda:>Expression)
+                        )).Visit (lambda:>Expression) :?> LambdaExpression
 
                         //List.fold (fun ((s:LambdaExpression), idx) a ->
                         //    let sParam = s.Parameters |> Seq.toArray
                         //    let s_nxt = Expression.Lambda((visitorP idx a sParam).Visit (s:>Expression))                            
                         //    s_nxt.Body :?> LambdaExpression, idx + 1
                         //) (lambda, 0) expParam
-
+                    let ags = paramList
                     let vLambda, _ =
                         List.fold (fun ((s:LambdaExpression), idx) a ->
                             let sParam = s.Parameters |> Seq.toArray
-                            let s_nxt = Expression.Lambda((visitorP idx a sParam).Visit (s:>Expression))                            
-                            s_nxt.Body :?> LambdaExpression, idx + 1
-                        ) (lambda, 0) xsv
+                            //let s_nxt = Expression.Lambda((visitorP idx a sParam).Visit (s:>Expression))                            
+                            let s_nxt = (visitorP idx a sParam).Visit (s:>Expression)
+                            s_nxt :?> LambdaExpression, idx + 1
+                        ) (vLambda_base, 0) xsv
                     Some (vLambda :> Expression)
                 //| DTCurF3toV1 (f, (Symbol sym)) ->
             | Undefined -> None
@@ -550,8 +531,8 @@ module Linq =
 
             ) (convertExpr simplifiedBody)
 
-    [<CompiledName("FormatLambda")>]
-    let formatLambda (expr : MathNet.Symbolics.Expression) (args : Symbol list) : LambdaExpression option =
+    
+    and [<CompiledName("FormatLambda")>] formatLambda (expr : MathNet.Symbolics.Expression) (args : Symbol list) : LambdaExpression option =
         let value = function
             | Value.Approximation a -> Some (Expression.Constant a.RealValue :> Expression)
             | Value.NegativeInfinity -> Some (Expression.Constant System.Double.NegativeInfinity :> Expression)
