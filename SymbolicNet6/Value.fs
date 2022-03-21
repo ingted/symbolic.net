@@ -27,21 +27,33 @@ type Value =
             | Number vlv ->
                 match vr with
                 | Number vrv ->
-                    vlv * vrv
+                    Number (vlv * vrv)
+            | Approximation (Real vlv) ->
+                match vr with
+                | Approximation (Real vrv) ->
+                    Approximation (Real (vlv + vrv))
+                | DSTen dt ->
+                    DSTen (vlv + dt)
         static member (*) (vl : Value, vr : float) =
             match vl with
             | Approximation (Real vlv) ->
-                vlv * vr
+                Approximation (Real (vlv * vr))
+        static member (*) (vl : float, vr : Value) =
+            match vr with
+            | Approximation (Real vrv) ->
+                Approximation (Real (vl * vrv))
         static member (+) (vl : Value, vr : float) =
             match vl with
             | Approximation (Real vlv) ->
-                vlv + vr
+                Approximation (Real (vlv + vr))
         static member (+) (vl : float, vr : Value) =
             match vr with
             | Approximation vrv ->
                 match vrv with
                 | Approximation.Real vrvv ->
-                    vl + vrvv
+                    Approximation (Real (vl + vrvv))
+            | DSTen dt ->
+                DSTen (vl + dt)
         
     
 

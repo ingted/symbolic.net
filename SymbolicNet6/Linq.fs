@@ -149,6 +149,7 @@ module Linq =
     let exprObj2ValueToInject = //: Expression<Func<obj, MathNet.Symbolics.Value>> =
         ExprHelper.Quote<Func<obj, MathNet.Symbolics.Value>> (fun j ->
             match j with
+            | :? Value -> (j :?> Value) 
             | _ when j.GetType() = typeof<float> ->
                 //failwith "orz"
                 //MathNet.Symbolics.Value.fromDouble  0.0
@@ -157,6 +158,24 @@ module Linq =
                 Value.RealVec (j :?> Vector<float>)
             | :? Matrix<float> ->
                 Value.RealMat (j :?> Matrix<float>)
+            | _ ->
+                failwithf "orz010: %s, %A" (j.GetType().FullName) j
+            )
+            :> Expression :?> LambdaExpression
+
+           
+    let exprFloatingPoint2ValueToInject = 
+        ExprHelper.Quote<Func<FloatingPoint, MathNet.Symbolics.Value>> (fun j ->
+            match j with
+            | Real r -> Value.Approximation (Approximation.Real r)
+            | Complex c -> Value.fromComplex c
+            | RealVector rv ->
+                Value.RealVec rv
+            | RealMatrix rm ->
+                Value.RealMat rm
+            | WTensor (DSTensor dt) -> Value.DSTen dt
+            | _ ->
+                failwithf "exprFloatingPoint2ValueToInject not supported!!! %A" j
             )
             :> Expression :?> LambdaExpression
 
@@ -371,6 +390,8 @@ module Linq =
 
                     Some (vLambda :> Expression)
                 //| DTCurF3toV1 (f, (Symbol sym)) ->
+                | _ ->
+                    failwithf "havent yet supported compilation"
             | Identifier(sym) ->
                 Option.map (fun x -> x :> Expression) (getParam sym)
             | Argument(sym) ->
@@ -732,7 +753,30 @@ module Compile =
         let cmpl = exprv.Compile()
         cmpl
     let compileExpressionOrThrow2 expr args =
-        let exprv = (Linq.formatLambda expr args).Value
+        let exprv_base = (Linq.formatValueLambda expr args).Value
+
+        let f2vParam =
+            args
+            |> List.map (fun (Symbol s) ->
+                let paramI = Expression.Parameter(typeof<FloatingPoint>, s)
+                paramI
+            ) |> List.toArray
+
+        let f2v =
+            f2vParam
+            |> Array.map (fun paramI ->
+                let ivk = Expression.Invoke(Linq.exprFloatingPoint2ValueToInject :> Expression, [|paramI:> Expression|])
+                ivk :> Expression
+            )
+        
+        
+        let exprv =
+            Expression.Lambda(
+                Expression.Invoke(exprv_base:> Expression, f2v) :> Expression
+                , f2vParam
+            )
+
+
         let cmpl = exprv.Compile()
         exprv, cmpl
     let compileComplexExpressionOrThrow expr args = (Linq.formatComplexLambda expr args).Value.Compile()
@@ -786,6 +830,8 @@ module Evaluate =
                    |> List.ofArray
                 )
             vl |> Array.ofList, ss
+        | _ ->
+            failwithf "listOf2Obj orz"
 
     let listOf2DSTensor (wt0:TensorWrapper) =
         let fArray, shapeReversed = listOf2Obj (wt0, [])
@@ -1050,11 +1096,12 @@ module Evaluate =
             let cal_param_obj_val () =
                 xs
                 |> List.map (fun exp ->
-                    match evaluate symbols exp with
-                    | (Real v) -> box v
-                    | WTensor (DSTensor t) ->
-                        box t
-                    | _ -> null
+                    evaluate symbols exp |> box//formatValueLambda 吃 value 傳入值
+                    //match evaluate symbols exp with
+                    //| (Real v) -> box v
+                    //| WTensor (DSTensor t) ->
+                    //    box t
+                    //| _ -> null
                 )
                 |> Array.ofList
             let cal_param_real_val () =
@@ -1149,6 +1196,8 @@ module Evaluate =
                                 RealVector r
                             | Real ra ->
                                 RealVector (vs * ra)
+                            | _ ->
+                                failwithf "orz 0001"
                         | RealMatrix ms ->
                             match a with
                             | RealVector va ->
@@ -1160,6 +1209,8 @@ module Evaluate =
                             | Real ra ->
                                 let r = ra * ms
                                 RealMatrix r
+                            | _ ->
+                                failwithf "orz 0002"
                         | Real rs ->
                             match a with
                             | RealVector va ->
@@ -1171,7 +1222,13 @@ module Evaluate =
                             | Real ra ->
                                 let r = ra * rs
                                 Real r
+                            | _ ->
+                                failwithf "orz 0003"
+                        | _ ->
+                            failwithf "orz 0004"
                     ) param_val.[0]
+                | _ ->
+                    failwithf "omg fnm!!!"
             else
                 match funDict.[fnm] with
                 | DTExp (param, fx) ->
@@ -1201,6 +1258,16 @@ module Evaluate =
                         | :? Vector<float> as v -> v |> RealVector
                         | :? Matrix<float> as v -> v |> RealMatrix
                         | :? Tensor as t -> WTensor (DSTensor t)
+                        | :? Value as v ->
+                            match v with
+                            | MathNet.Symbolics.Value.Approximation r ->
+                                match r with
+                                | Approximation.Real rr ->
+                                    rr |> Real
+                            | MathNet.Symbolics.Value.DSTen dt ->
+                                WTensor (DSTensor dt)
+                        | _ ->
+                                failwithf "orz 0005"
                     | Choice2Of2 frv ->
                         evaluate symbols frv
                 | DTFunI1toI1 f ->
