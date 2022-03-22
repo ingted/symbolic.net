@@ -24,6 +24,30 @@ type A = {
 
 [<EntryPoint>]
 let main argv =
+
+    let _ =
+        cur3fto1v "ma_base" ((
+            fun cur cmid scale pos -> //vector [1.0;2;3]
+                if scale = 30.0 || cmid <> 0 then //ES連續月目前以 0 表示
+                    vector [1.5; 2.5; 3.5]
+                else
+                    failwithf "scale not supported"
+    
+            ), Symbol "cur")
+
+    let _ =
+        define "ma" ([Symbol "cmid"; Symbol "scale"; Symbol "pos"],
+            SymbolicExpression.XParse "ma_base(cmid, scale, pos)")
+
+    let symbols = dict ["cur", MathNet.Symbolics.FloatingPoint.Real 0.0]
+    let mabv = SymbolicExpression.Parse("ma_base(0.0, 30.0, 0.0)").Evaluate(symbols)
+    printfn "mabv: %A" mabv
+    let maexp = SymbolicExpression.Parse("ma(0.0, 30.0, 0.0) + 1")
+    let mav = maexp.Evaluate(symbols)
+    printfn "mav: %A" mav
+
+
+
     let a0 = SymbolicExpression(Infix.parseOrThrow("v * 2")).Evaluate(symbols2)
     printfn "%A" a0.RealVectorValue
     let a1 = SymbolicExpression(Infix.parseOrThrow("v + 1")).Evaluate(symbols2)
@@ -92,7 +116,7 @@ let main argv =
     let a6 = SymbolicExpression.Parse("2 * htensor(lo(lo(lo(vec(1,2,3), vec(4,5,6)), lo(vec(7,8,9), vec(10,11,12)))))").Evaluate(symbols2)
     printfn "a6:%A" a6
 
-    let a7expr = SymbolicExpression.Parse("t0(1, 2 * htensor(lo(lo(lo(vec(1,2,3), vec(4,5,6)), lo(vec(7,8,9), vec(10,11,12))))))")
+    let a7expr = SymbolicExpression.Parse("t0(1, 2 * htensor(lo(lo(lo(vec(1,2,3), vec(4,5,6)), lo(vec(7,8,9), vec(10,11,12)))))) + 3")
     let a7 = a7expr.Evaluate(symbols2)
     printfn "a7:%A" a7
 

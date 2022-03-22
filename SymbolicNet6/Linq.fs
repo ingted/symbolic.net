@@ -928,6 +928,8 @@ module Evaluate =
         | PosInf, NegInf -> Undef
         | PosInf, _ | _, PosInf -> PosInf
         | NegInf, _ | _, NegInf -> NegInf
+        //| WTensor (DSTensor dt), Real y -> WTensor (DSTensor (dt + y))
+        | Real x, WTensor (DSTensor dt) -> WTensor (DSTensor (x + dt))
         | _ -> failwith "not supported"
 
     let fmultiply u v =
@@ -1065,7 +1067,23 @@ module Evaluate =
         | HankelH2, [Real nu; Complex x] -> Complex (SpecialFunctions.HankelH2 (nu, x))
         | _ -> failwith "not supported"
 
-    
+    let obj2FloatPoint (rst: obj) =
+        match rst with
+        | :? float as f -> f |> Real
+        | :? FloatingPoint as fp -> fp
+        | :? Vector<float> as v -> v |> RealVector
+        | :? Matrix<float> as v -> v |> RealMatrix
+        | :? Tensor as t -> WTensor (DSTensor t)
+        | :? Value as v ->
+            match v with
+            | MathNet.Symbolics.Value.Approximation r ->
+                match r with
+                | Approximation.Real rr ->
+                    rr |> Real
+            | MathNet.Symbolics.Value.DSTen dt ->
+                WTensor (DSTensor dt)
+        | _ ->
+            failwithf "orz 0005"
 
     [<CompiledName("Evaluate")>]
     let rec evaluate (symbols:IDictionary<string, FloatingPoint>) = function
@@ -1239,10 +1257,12 @@ module Evaluate =
                             match funDict.[sb] with
                             | DTExp (param2, fx2) -> analysisFx fx2
                             | _ ->
-                                Choice2Of2 fxExpr
-                        | FunInvocation _ ->
-                            Choice2Of2 fxExpr
-                        | _ -> Choice1Of2 fxExpr
+                                let substitute = ((Symbol sb), xs) 
+                                Choice2Of2 <| FunInvocation substitute
+                        | FunInvocation ((Symbol sb), _) ->
+                            let substitute = ((Symbol sb), xs) 
+                            Choice2Of2 <| FunInvocation substitute
+                        | _ -> Choice1Of2 fxExpr //Choice1Of2 不是funInvoke
                     let fx_real = analysisFx fx
                     match fx_real with
                     | Choice1Of2 frv ->
@@ -1253,22 +1273,17 @@ module Evaluate =
                         //        (Linq.replaceType a.Name s) :?> LambdaExpression
                         //    ) expr
                         let rst = cmpl.DynamicInvoke(param_val:obj[])
-                        match rst with
-                        | :? float as f -> f |> Real
-                        | :? Vector<float> as v -> v |> RealVector
-                        | :? Matrix<float> as v -> v |> RealMatrix
-                        | :? Tensor as t -> WTensor (DSTensor t)
-                        | :? Value as v ->
-                            match v with
-                            | MathNet.Symbolics.Value.Approximation r ->
-                                match r with
-                                | Approximation.Real rr ->
-                                    rr |> Real
-                            | MathNet.Symbolics.Value.DSTen dt ->
-                                WTensor (DSTensor dt)
-                        | _ ->
-                                failwithf "orz 0005"
+                        obj2FloatPoint rst
                     | Choice2Of2 frv ->
+                        //let newSymbols =
+                        //    Seq.zip param param_val
+                        //    |> Seq.map (fun ((Symbol k), v) -> k, obj2FloatPoint v)
+                        //let combinedSymbols =
+                        //    symbols
+                        //    |> Seq.map (fun kvp -> kvp.Key, kvp.Value)
+                        //    |> Seq.append newSymbols
+                        //    |> dict
+
                         evaluate symbols frv
                 | DTFunI1toI1 f ->
                     let param_val = cal_param_real_val ()
