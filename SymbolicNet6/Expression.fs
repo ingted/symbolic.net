@@ -411,6 +411,7 @@ module Operators =
     let private PiIHalf = divide PiI two
 
     let cFun(fnm, paramList) = FunInvocation (Symbol fnm, paramList)
+    let cfun fnm paramList = FunInvocation (Symbol fnm, paramList)
     let abs : Expression -> Expression = function
         | Undefined -> undefined
         | oo when isInfinity oo -> infinity
