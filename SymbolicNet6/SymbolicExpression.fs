@@ -20,7 +20,7 @@ type SymbolicExpressionType =
     | NegativeInfinity = 12
     | Undefined = 13
 
-
+[<ProtoBuf.ProtoContract>]
 [<StructuredFormatDisplay("{Expression}")>]
 type SymbolicExpression(expression:Expression) =
 
@@ -78,7 +78,17 @@ type SymbolicExpression(expression:Expression) =
         | Argument (Symbol s) -> s
         | _ -> failwith "Not a variable"
 
-
+    interface System.IComparable with
+        member this.CompareTo(otherObj) =
+            match otherObj with
+            | :? SymbolicExpression as other ->
+                compare (this.Expression.ToString()) (other.Expression.ToString())
+                //let keyCompare = compare (this._idx.KeysSafe |> Seq.toArray) (other._idx.KeysSafe |> Seq.toArray)
+                //if keyCompare = 0 then
+                //    compare (this._base.ValuesSafe |> Seq.toArray) (other._base.ValuesSafe |> Seq.toArray)
+                //else
+                //    keyCompare
+            | _ -> invalidArg "otherObj" $"Not a SymbolicExpression"
 
     // LEAFS - Integer
     static member Zero = SymbolicExpression(zero)

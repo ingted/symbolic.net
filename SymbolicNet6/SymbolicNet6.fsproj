@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
@@ -35,18 +35,20 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="DiffSharp-cpu" Version="1.0.7-preview1873603133" />
-    <PackageReference Include="DiffSharp.Backends.Reference" Version="1.0.7-preview1873603133" />
-    <PackageReference Include="DiffSharp.Backends.Torch" Version="1.0.7-preview1873603133" />
-    <PackageReference Include="DiffSharp.Core" Version="1.0.7-preview1873603133" />
+    <PackageReference Include="DiffSharp-cpu" Version="1.0.7" />
+    <PackageReference Include="DiffSharp.Backends.Reference" Version="1.0.7" />
+    <PackageReference Include="DiffSharp.Backends.Torch" Version="1.0.7" />
+    <PackageReference Include="DiffSharp.Core" Version="1.0.7" />
     <PackageReference Include="FParsec" Version="1.1.1" />
-    <PackageReference Include="MathNet.Numerics" Version="5.0.0-alpha16" />
-    <PackageReference Include="MathNet.Numerics.FSharp" Version="5.0.0-alpha16" />
+    <PackageReference Include="MathNet.Numerics" Version="6.0.0-beta1" />
+    <PackageReference Include="MathNet.Numerics.FSharp" Version="6.0.0-beta1" />
     <PackageReference Include="System.Runtime.Numerics" Version="4.3.0" />
+      <PackageReference Include="protobuf-net" Version="3.2.45" />
+      <PackageReference Include="protobuf-net.Core" Version="3.2.45" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Update="FSharp.Core" Version="6.0.3" />
+    <PackageReference Update="FSharp.Core" Version="9.0.201" />
   </ItemGroup>
 
 </Project>

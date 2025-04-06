@@ -8,12 +8,29 @@ type TTC = {
     with
         static member op_Implicit (x:int) = {oorz=x}
         static member (+) (l:TTC, r:int) = l.oorz + r
+        static member op_Implicit(x: TTC) = x.oorz 
 
-int {oorz=123}
+type System.Int32 with
+    static member op_Implicit (x:TTC) = x.oorz
 
-123 :?> TTC
+
+(*
+//這三個都是錯的
+//123 :?> TTC
+
+//int {oorz=123}
+
+//TTC(123)
+*)
+
+let ttcFromInt (i:TTC) = i.oorz
+
+ttcFromInt 1234
 
 let inline (!>) (x:^a) : ^b = ((^a or ^b) : (static member op_Implicit : ^a -> ^b) x)
+
+let ttc:TTC = !> 123 
+let oorz:int = !> {oorz=123}
 
 type A() = class end
 type B() = 
@@ -70,6 +87,9 @@ module Lambda =
 let toTraverse = <@ Func<int, int, int>(fun i k -> i + k + 1) @> |> Lambda.toExpression 
 // val toTraverse : Expression<Func<int,int>> = i => (i + 1)
 
+let toFsTraverse = <@ (fun i k -> i + k + 1) @> |> LeafExpressionConverter.QuotationToExpression 
+
+
 let toInject = <@ Func<int, int>(fun j -> j * 2) @> |> Lambda.toExpression
 // val toInject : Expression<Func<int,int>> = j => (j * 2)
 
@@ -84,6 +104,9 @@ let inline visitor (b:^T when ^T:(member Body:Expression) and ^T:(member Paramet
         }
 let visited = (visitor toInject).Visit toTraverse
 // val visited : Expression = j => ((j * 2) + 1)
+
+
+
 (((visited :?> LambdaExpression).Body :?> BinaryExpression).Left :?> BinaryExpression).Left
 let f = Expression.Lambda(visited).Compile().DynamicInvoke() |> unbox<Func<int,int>>
 let fv = f.Invoke(5) // val it : int = 11
@@ -171,6 +194,8 @@ let replaceName pNmOriginal pNm2Replace (expr:LambdaExpression) =
 let toTraverseAllP = <@ Func<int, int, int>(fun i k -> i + k) @> |> Lambda.toExpression :> Expression
  
 replaceName "i" "m" (toTraverseAllP :?> LambdaExpression)
+
+#r "nuget: System.Linq.Dynamic.Core, 1.6.0.2"
 
 type TRIVIAL = {
     orz: int

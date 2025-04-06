@@ -59,6 +59,12 @@ let main argv =
     let a4 = SymbolicExpression(Infix.parseOrThrow("mat_multiply(m, mat_by_col(v, vec(1.0,2.0,3.0), v), v)")).Evaluate(symbols2)
     printfn "a4: %A" a4
 
+    let _ = defAct "hi" (fun () -> printfn "hi")
+
+    let a5_ = SymbolicExpression(Infix.parseOrThrow("hi()")).Evaluate(dict [])
+    let a50 = SymbolicExpression(Infix.parseOrThrow("x")).Evaluate(dict ["x", FloatingPoint.Real 123.0])
+    
+
     cFun ("mat_by_row", []) |> ignore
 
     let symV = Symbol "v"

@@ -128,13 +128,25 @@ module Linq =
         | Product ax -> product <| List.map denominator ax
         | _ -> one
 
-    let rec translateExpr (linq:Expression) = 
-        match linq with
-        | :? MethodCallExpression as mc ->
-            let le = mc.Arguments.[0] :?> LambdaExpression
-            let args, body = translateExpr le.Body
-            le.Parameters.[0] :: args, body
-        | _ -> [], linq
+    //let rec translateExpr (linq:Expression) = 
+    //    match linq with
+    //    | :? MethodCallExpression as mc ->
+    //        let le = mc.Arguments.[0] :?> LambdaExpression
+    //        let args, body = translateExpr le.Body
+    //        le.Parameters.[0] :: args, body
+    //    | _ -> [], linq
+
+    //20250406 取代 translateExpr
+    let rec collectParamsAndBody (e: Expression) =
+        match e with
+        | :? LambdaExpression as le ->
+            let args, body = collectParamsAndBody le.Body
+            let ps = le.Parameters |> Seq.toList
+            (ps @ args), body
+        | :? MethodCallExpression as mc when mc.Method.Name = "ToFSharpFunc" ->
+            collectParamsAndBody mc.Arguments.[0]
+        | other ->
+            [], other
 
     type 'T rc = Collections.ObjectModel.ReadOnlyCollection<'T>
 
@@ -149,17 +161,18 @@ module Linq =
     let exprObj2ValueToInject = //: Expression<Func<obj, MathNet.Symbolics.Value>> =
         ExprHelper.Quote<Func<obj, MathNet.Symbolics.Value>> (fun j ->
             match j with
-            | :? Value -> (j :?> Value) 
-            | _ when j.GetType() = typeof<float> ->
+            | :? Value as v -> v
+            //| _ when j.GetType() = typeof<float> -> //20250406 應該不用這樣寫
+            | :? float as v ->
                 //failwith "orz"
                 //MathNet.Symbolics.Value.fromDouble  0.0
-                Value.Approximation (Approximation.Real (j :?> float))
-            | :? Vector<float> ->
-                Value.RealVec (j :?> Vector<float>)
-            | :? Matrix<float> ->
-                Value.RealMat (j :?> Matrix<float>)
+                Value.Approximation (Approximation.Real v)
+            | :? Vector<float> as v ->
+                Value.RealVec v
+            | :? Matrix<float> as v ->
+                Value.RealMat v
             | _ ->
-                failwithf "orz010: %s, %A" (j.GetType().FullName) j
+                failwithf "exprObj2ValueToInject: %s, %A" (j.GetType().FullName) j
             )
             :> Expression :?> LambdaExpression
 
@@ -1299,5 +1312,8 @@ module Evaluate =
                     let param_val = cal_param_real_val ()
                     let cur = symbols.[sym].RealValue
                     f cur param_val.[0] param_val.[1] param_val.[2] |> RealVector
+                | DTFunAction f ->
+                    f ()
+                    Undef
 
     Linq.ExprHelper.evaluate <- evaluate

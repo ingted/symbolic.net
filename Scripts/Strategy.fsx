@@ -1,13 +1,13 @@
 //#r @"..\src\Symbolics\bin\Debug\netstandard2.0\MathNet.Symbolics.dll"
-#r @"G:\git\mathnet-symbolics\SymbolicNet6\bin\Debug\net6.0\SymbolicNet6.dll"
+#r @"..\SymbolicNet6\bin\Debug\net9.0\SymbolicNet6.dll"
 #r @".\FsProfiler\FsProfiler.dll"
-#r @"nuget:MathNet.Numerics"
+#r @"nuget: MathNet.Numerics, 5.0.0"
 #r @"nuget:FsUnit"
 #r @"nuget:FParsec"
 #r @"nuget:MathNet.Numerics.FSharp"
-#r "nuget: DiffSharp.Core, 1.0.7-preview1873603133"
-#r "nuget: DiffSharp.Backends.Reference, 1.0.7-preview1873603133"
-#r "nuget: DiffSharp.Backends.Torch, 1.0.7-preview1873603133"
+#r "nuget: DiffSharp.Core, 1.0.7"
+#r "nuget: DiffSharp.Backends.Reference, 1.0.7"
+#r "nuget: DiffSharp.Backends.Torch, 1.0.7"
 //#I @"..\SymbolicNet6"
 //#load @".\Symbols.fs"
 //#load @".\Approximation.fs"
@@ -34,7 +34,7 @@
 //#load @".\Linq.fs"
 //#load @".\Compile.fs"
 //#load @".\Evaluate.fs"
-#load @"..\src\Symbolics.Tests\Global.fs"
+#load @"..\SymbolicNet6.Test\Global.fs"
 
 open MathNet.Numerics
 open MathNet.Symbolics
@@ -102,14 +102,47 @@ let changeIt (o:int[]) =
 
 changeIt o
 
-let changeIt2 (o:int[]) =
+let changeIt2 (oo:int[]) =
     o <- [||]
 
 changeIt2 o
 
-define "test" ([symV; symW], (v + w)*2)
+define "test" ([symV; symW], (v + w) * 2)
 define "test1" ([symV; symW], Infix.parseOrThrow("test(v, w)"))
 SymbolicExpression(Infix.parseOrThrow("2^test(x, 2 * x)")).Evaluate(dict[ "x", FloatingPoint.Real 2.0; ])
+SymbolicExpression(Infix.parseOrThrow("2^test1(x, 2 * x)")).Evaluate(dict[ "x", FloatingPoint.Real 2.0; ])
+
+SymbolicExpression(Infix.parseOrThrow("2^test1(x, 2 * x)")).Expression.ToString()
+Infix.parseOrThrow("2^test1(x, 2 * x)").ToString()
+
+SymbolicExpression(Product
+    [Number 2N;
+        FunInvocation (Symbol "test",
+            [Sum [Number 10N; Identifier (Symbol "x")]; Approximation (Real 100.0)]
+        )
+    ]
+).Evaluate(dict[ "x", FloatingPoint.Real 2.0; ])
+
+
+
+SymbolicExpression(Power
+    (Number 2N,
+     FunInvocation
+       (Symbol "test",
+        [Identifier (Symbol "x"); Product [Number 2N; Identifier (Symbol "x")]])
+       )
+).Evaluate(dict[ "x", FloatingPoint.Real 2.0; ])
+
+#r @"G:\coldfar_py\sharftrade9\實驗\ExperimentsContainer\../SharFTrade.Exp/bin2/net9.0\protobuf-net.dll"
+#r @"G:\coldfar_py\sharftrade9\實驗\ExperimentsContainer\../SharFTrade.Exp/bin2/net9.0\protobuf-net.Core.dll"
+
+let power = Power (
+    Number 2N,
+    FunInvocation
+       (Symbol "test",
+        [Identifier (Symbol "x"); Product [Number 2N; Identifier (Symbol "x")]])
+       )
+SymbolicExpression(Infix.parseOrThrow((SymbolicExpression power).ToString()))
 
 SymbolicExpression(cFun("test", [x + (fromInt32 10); (fromDouble 100.0)])*2).Evaluate(dict[ "x", FloatingPoint.Real 9.0; ])
 
@@ -148,7 +181,9 @@ let rec translateExpr (linq:Expression) =
         let le = mc.Arguments.[0] :?> LambdaExpression
         let args, body = translateExpr le.Body
         le.Parameters.[0] :: args, body
-    | _ -> [], linq
+    | _ ->
+        printfn "not MethodCallExpression"
+        [], linq
 
 
 open Microsoft.FSharp.Quotations
@@ -166,14 +201,29 @@ let toLinq (expr : Expr<'a -> 'b>) =
     let lambda = call.Arguments.[0] :?> LambdaExpression
     Expression.Lambda<Func<'a, 'b>>(lambda.Body, lambda.Parameters) 
 
+LeafExpressionConverter.QuotationToExpression (<@ fun a b c -> (a + b) * c @>) :?> MethodCallExpression
+LeafExpressionConverter.QuotationToExpression <@ System.String.Concat("Hello", "World") @> :?> MethodCallExpression
+
 let liq = toLinq (<@ fun a b c -> (a + b) * c @>)
 
 liq.Compile()
 
 
-let args, body = translateExpr liq
-let f = Expression.Lambda<Func<int, int, int, int>>
-          (body, args |> Array.ofSeq)
+let rec collectParamsAndBody (e: Expression) =
+    match e with
+    | :? LambdaExpression as le ->
+        let args, body = collectParamsAndBody le.Body
+        let ps = le.Parameters |> Seq.toList
+        (ps @ args), body
+    | :? MethodCallExpression as mc when mc.Method.Name = "ToFSharpFunc" ->
+        collectParamsAndBody mc.Arguments.[0]
+    | other ->
+        [], other
+
+
+//let args, body = translateExpr liq //後面會錯誤，正確版本是 collectParamsAndBody
+let args, body = collectParamsAndBody liq
+let f = Expression.Lambda<Func<int, int, int, int>>(body, args |> Array.ofSeq)
 f.Compile().Invoke(10, 11, 2)
 
 

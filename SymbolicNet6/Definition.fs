@@ -20,7 +20,7 @@ module Definition =
                    "htensor", true; 
                    "gtensor", true;
                    "list_of", true; "lo", true;
-                   "htensor", true
+                   //"htensor", true
                    ]
 
     let keyWord = dict kwlist
