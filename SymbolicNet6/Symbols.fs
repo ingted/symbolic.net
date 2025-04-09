@@ -1,7 +1,10 @@
 ﻿namespace MathNet.Symbolics
 
 type Symbol = Symbol of string
-
+    with
+        member this.SymbolName =
+            match this with
+            | Symbol name -> name
 type Function =
     | Abs
     | Ln | Lg | Exp

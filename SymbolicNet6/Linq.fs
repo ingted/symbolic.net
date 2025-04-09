@@ -13,72 +13,95 @@ open Operators
 open MathNet.Numerics.LinearAlgebra
 open Definition
 open DiffSharp
+open System.Collections.Concurrent
+open PersistedConcurrentSortedList
+open Deedle
 
 
-type TensorWrapper =
-| DSTensor of Tensor
-| VecInTensor of Vector<float>
-| ListOf of TensorWrapper list
+//type TensorWrapper =
+//| DSTensor of Tensor
+//| VecInTensor of Vector<float>
+//| ListOf of TensorWrapper list
 
-and [<NoComparison>] FloatingPoint =
-    | Real of float
-    | Complex of complex
-    | RealVector of Vector<float>
-    | ComplexVector of Vector<complex>
-    | RealMatrix of Matrix<float>
-    | ComplexMatrix of Matrix<complex>
-    | Undef
-    | PosInf
-    | NegInf
-    | ComplexInf
-    | WTensor of TensorWrapper
+//and [<NoComparison>] FloatingPoint =
+//    | Real of float
+//    | Complex of complex
+//    | RealVector of Vector<float>
+//    | ComplexVector of Vector<complex>
+//    | RealMatrix of Matrix<float>
+//    | ComplexMatrix of Matrix<complex>
+//    | Undef
+//    | PosInf
+//    | NegInf
+//    | ComplexInf
+//    | WTensor of TensorWrapper
+//    | Context of ConcurrentDictionary<VarName, FloatingPoint>
+//    | FC of fCell<string>
+//    | Frame of Frame<string, int64>
+//    | Series of ObjectSeries<int64>
+//    | NestedExpr of Expression list
 
-    // Simpler usage in C#
-    static member op_Implicit (x:float) = Real x
-    static member op_Implicit (x:float32) = Real (float x)
-    static member op_Implicit (x:complex) = Complex x
-    static member op_Implicit (x:complex32) = Complex (Primitive.complex x)
-    static member op_Implicit (x:Vector<float>) = RealVector x
-    static member op_Implicit (x:Vector<complex>) = ComplexVector x
-    static member op_Implicit (x:Matrix<float>) = RealMatrix x
-    static member op_Implicit (x:Matrix<complex>) = ComplexMatrix x
-    static member op_Implicit (x:Tensor) = WTensor <| DSTensor x
-    static member (*) ((a:FloatingPoint), (b: FloatingPoint)) =
-        Real 0
-    static member (*) ((a:float), (b: FloatingPoint)) =
-        Real 0
-    static member (*) ((a:FloatingPoint), (b: float)) =
-        Real 0 
-    member x.RealValue =
-        match x with
-        | Real x -> x
-        | Complex x when x.IsReal() -> x.Real
-        | _ -> failwith "Value not convertible to a real number."
-    member x.ComplexValue =
-        match x with
-        | Real x -> complex x 0.0
-        | Complex x -> x
-        | _ -> failwith "Value not convertible to a complex number."
-    member x.RealVectorValue =
-        match x with
-        | RealVector x -> x
-        | _ -> failwith "Value not convertible to a real vector."
-    member x.ComplexVectorValue =
-        match x with
-        | ComplexVector x -> x
-        | _ -> failwith "Value not convertible to a complex vector."
-    member x.RealMatrixValue =
-        match x with
-        | RealMatrix x -> x
-        | _ -> failwith "Value not convertible to a real matrix."
-    member x.ComplexMatrixValue =
-        match x with
-        | ComplexMatrix x -> x
-        | _ -> failwith "Value not convertible to a complex matrix."
-    member x.DTensorValue =
-        match x with
-        | WTensor (DSTensor x) -> x
-        | _ -> failwith "Value not convertible to a DSTensor."
+//    // Simpler usage in C#
+//    static member op_Implicit (x:float) = Real x
+//    static member op_Implicit (x:float32) = Real (float x)
+//    static member op_Implicit (x:complex) = Complex x
+//    static member op_Implicit (x:complex32) = Complex (Primitive.complex x)
+//    static member op_Implicit (x:Vector<float>) = RealVector x
+//    static member op_Implicit (x:Vector<complex>) = ComplexVector x
+//    static member op_Implicit (x:Matrix<float>) = RealMatrix x
+//    static member op_Implicit (x:Matrix<complex>) = ComplexMatrix x
+//    static member op_Implicit (x:Tensor) = WTensor <| DSTensor x
+//    static member op_Implicit (x:fCell<string>) = FC x
+//    static member op_Implicit (x:Frame<string, int64>) = Frame x
+//    static member op_Implicit (x:ObjectSeries<int64>) = Series x
+//    static member (*) ((a:FloatingPoint), (b: FloatingPoint)) =
+//        Real 0
+//    static member (*) ((a:float), (b: FloatingPoint)) =
+//        Real 0
+//    static member (*) ((a:FloatingPoint), (b: float)) =
+//        Real 0 
+//    member x.RealValue =
+//        match x with
+//        | Real x -> x
+//        | Complex x when x.IsReal() -> x.Real
+//        | _ -> failwith "Value not convertible to a real number."
+//    member x.ComplexValue =
+//        match x with
+//        | Real x -> complex x 0.0
+//        | Complex x -> x
+//        | _ -> failwith "Value not convertible to a complex number."
+//    member x.RealVectorValue =
+//        match x with
+//        | RealVector x -> x
+//        | _ -> failwith "Value not convertible to a real vector."
+//    member x.ComplexVectorValue =
+//        match x with
+//        | ComplexVector x -> x
+//        | _ -> failwith "Value not convertible to a complex vector."
+//    member x.RealMatrixValue =
+//        match x with
+//        | RealMatrix x -> x
+//        | _ -> failwith "Value not convertible to a real matrix."
+//    member x.ComplexMatrixValue =
+//        match x with
+//        | ComplexMatrix x -> x
+//        | _ -> failwith "Value not convertible to a complex matrix."
+//    member x.DTensorValue =
+//        match x with
+//        | WTensor (DSTensor x) -> x
+//        | _ -> failwith "Value not convertible to a DSTensor."
+//    member x.FrameValue =
+//        match x with
+//        | Frame x -> x
+//        | _ -> failwith "Value not convertible to a Frame."
+//    member x.FCValue =
+//        match x with
+//        | FC x -> x
+//        | _ -> failwith "Value not convertible to a fCell."
+//    member x.SeriesValue =
+//        match x with
+//        | Series x -> x
+//        | _ -> failwith "Value not convertible to a Series."
 
 
 [<RequireQualifiedAccess>]
@@ -102,7 +125,7 @@ module Linq =
             |> unbox<Expression<'a>>
 
     [<CompiledName("Parse")>]
-    let rec parse (q:Expression) : MathNet.Symbolics.Expression =
+    let rec parse (q: System.Linq.Expressions.Expression) : MathNet.Symbolics.Expression =
         match q.NodeType, q with
         | ExpressionType.UnaryPlus, (:? UnaryExpression as e) -> +(parse e.Operand)
         | ExpressionType.Negate, (:? UnaryExpression as e) -> -(parse e.Operand)
@@ -116,7 +139,7 @@ module Linq =
         | ExpressionType.Lambda, (:? LambdaExpression as e) -> parse e.Body
         | ExpressionType.Try, (:? TryExpression as e) -> parse e.Body
         | ExpressionType.Convert, (:? UnaryExpression as e) -> parse e.Operand
-        | _ -> failwith "not supported"
+        | _ -> failwith $"NodeType {q.NodeType} not supported"
 
     let rec private numerator = function
         | NegPower _ -> one
@@ -506,7 +529,7 @@ module Linq =
                 Option.map2 div (value Value.one) a
             | Power (x, Power(n, m)) when m = minusOne ->
                 let a = convertExpr x
-                let b = convertExpr (Power(n, m))
+                //let b = convertExpr (Power(n, m))
                 if n = two then
                     Option.map (mathCall1 "Sqrt") a
                 else
@@ -523,11 +546,11 @@ module Linq =
             | Sum(xs) ->
                 let summands = List.map convertExpr xs
                 let exprv = List.fold (Option.map2 add) (value Value.zero) summands
-                let vv =
-                    match exprv with
-                    | Some exprvv -> exprvv
-                    | None ->
-                        Unchecked.defaultof<Expression>
+                //let vv =
+                //    match exprv with
+                //    | Some exprvv -> exprvv
+                //    | None ->
+                //        Unchecked.defaultof<Expression>
                 exprv
             | Product(_) as p ->
                 let n = numerator p
@@ -757,42 +780,123 @@ module Linq =
 
 
 module Compile =
+    let compiledCache0 = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, LambdaExpression option>()
+    let delegateCache0 = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, Delegate option>()
 
-    let compileExpression expr args = Option.map (fun (x : LambdaExpression) -> x.Compile()) (Linq.formatLambda expr args)
-    let compileComplexExpression expr args = Option.map (fun (x : LambdaExpression) -> x.Compile()) (Linq.formatComplexLambda expr args)
+    let compiledCache = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, LambdaExpression>()
+    let delegateCache = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, Delegate>()
 
-    let compileExpressionOrThrow expr args =
-        let exprv = (Linq.formatLambda expr args).Value
-        let cmpl = exprv.Compile()
+
+    let compiledCache2 = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, LambdaExpression>()
+    let delegateCache2 = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, Delegate>()
+
+    let complexCache = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, LambdaExpression option>()
+    let delegateComplexCache = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, Delegate option>()
+
+    let complexCache2 = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, LambdaExpression option>()
+    let delegateComplexCache2 = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, Delegate>()
+
+    let compileExpression (expr_:MathNet.Symbolics.Expression) (args_:Symbol list) =
+        let cmpl =
+            delegateCache0.GetOrAdd(
+                (expr_, args_)
+                , (fun (expr, args) ->
+                    let exprv =
+                        compiledCache0.GetOrAdd(
+                            (expr, args)
+                            , fun (expr, args) ->
+                                (Linq.formatLambda expr args)
+                        )
+                    Option.map (fun (x : LambdaExpression) -> x.Compile()) exprv
+                )
+            )
         cmpl
-    let compileExpressionOrThrow2 expr args =
-        let exprv_base = (Linq.formatValueLambda expr args).Value
 
-        let f2vParam =
-            args
-            |> List.map (fun (Symbol s) ->
-                let paramI = Expression.Parameter(typeof<FloatingPoint>, s)
-                paramI
-            ) |> List.toArray
 
-        let f2v =
-            f2vParam
-            |> Array.map (fun paramI ->
-                let ivk = Expression.Invoke(Linq.exprFloatingPoint2ValueToInject :> Expression, [|paramI:> Expression|])
-                ivk :> Expression
+    let compileComplexExpression (expr_:MathNet.Symbolics.Expression) (args_:Symbol list) =
+        delegateComplexCache.GetOrAdd(
+            (expr_, args_)
+            , fun (expr, args) ->                
+                let lambdaExp =
+                    complexCache.GetOrAdd(
+                        (expr, args)
+                        , fun (expr, args) ->
+                            Linq.formatComplexLambda expr args
+                    )
+                Option.map (fun (x : LambdaExpression) -> x.Compile()) lambdaExp
+        )
+
+    let compileExpressionOrThrow (expr_:MathNet.Symbolics.Expression) (args_:Symbol list) =
+        let cmpl =
+            delegateCache.GetOrAdd(
+                (expr_, args_)
+                , (fun (expr, args) ->
+                    let exprv =
+                        compiledCache.GetOrAdd(
+                            (expr, args)
+                            , fun (expr, args) ->
+                                (Linq.formatLambda expr args).Value
+                        )
+                    exprv.Compile()
+                )
             )
-        
-        
+        cmpl
+
+    let compileExpressionOrThrow2 (expr_:MathNet.Symbolics.Expression) (args_:Symbol list) =
         let exprv =
-            Expression.Lambda(
-                Expression.Invoke(exprv_base:> Expression, f2v) :> Expression
-                , f2vParam
+            compiledCache2.GetOrAdd(
+                (expr_, args_)
+                , fun (expr, args) ->
+                    let exprv_base = (Linq.formatValueLambda expr args).Value
+
+                    let f2vParam =
+                        args
+                        |> List.map (fun (Symbol s) ->
+                            let paramI = Expression.Parameter(typeof<FloatingPoint>, s)
+                            paramI
+                        ) |> List.toArray
+
+                    let f2v =
+                        f2vParam
+                        |> Array.map (fun paramI ->
+                            let ivk = Expression.Invoke(Linq.exprFloatingPoint2ValueToInject :> Expression, [|paramI:> Expression|])
+                            ivk :> Expression
+                        )
+        
+        
+                    let exprv =
+                        Expression.Lambda(
+                            Expression.Invoke(exprv_base:> Expression, f2v) :> Expression
+                            , f2vParam
+                        )
+                    exprv
             )
 
-
-        let cmpl = exprv.Compile()
+        let cmpl =
+            delegateCache2.GetOrAdd(
+                (expr_, args_)
+                , (fun _ ->
+                    exprv.Compile()
+                )
+            )
         exprv, cmpl
-    let compileComplexExpressionOrThrow expr args = (Linq.formatComplexLambda expr args).Value.Compile()
+
+    let compileComplexExpressionOrThrow (expr_:MathNet.Symbolics.Expression) (args_:Symbol list) =
+
+        let cmpl =
+            delegateComplexCache2.GetOrAdd(
+                (expr_, args_)
+                , (fun (expr, args) ->
+                    let exprv =
+                        complexCache2.GetOrAdd(
+                            (expr, args)
+                            , fun (expr, args) ->
+                                (Linq.formatComplexLambda expr args)
+                        )
+                    exprv.Value.Compile()
+                )
+            )
+        cmpl
 
     let compileExpression1 expr arg = Option.map (fun (x : Delegate) -> x :?> Func<float, float>) (compileExpression expr [ arg ])
     let compileExpression2 expr arg1 arg2 = Option.map (fun (x : Delegate) -> x :?> Func<float, float, float>) (compileExpression expr [ arg1; arg2 ])
@@ -1098,8 +1202,8 @@ module Evaluate =
         | _ ->
             failwithf "orz 0005"
 
-    [<CompiledName("Evaluate")>]
-    let rec evaluate (symbols:IDictionary<string, FloatingPoint>) = function
+    [<CompiledName("Evaluate2")>]
+    let rec evaluate2 (symbolValues:IDictionary<string, FloatingPoint>, sysVarValues:IDictionary<string, FloatingPoint> option) = function
         | Number n -> Real (float n) |> fnormalize
         | Undefined -> Undef
         | ComplexInfinity -> ComplexInf
@@ -1111,23 +1215,30 @@ module Evaluate =
         | Approximation (Approximation.Real fp) -> Real fp
         | Approximation (Approximation.Complex fp) -> Complex fp
         | Identifier (Symbol s) ->
-            match symbols.TryGetValue s with
+            match symbolValues.TryGetValue s with
             | true, a -> a |> fnormalize
             | _ -> failwithf  "Failed to find symbol %s" s
         | Argument (Symbol s) -> failwithf  "Cannot evaluate a argument %s" s
-        | Sum xs -> xs |> List.map (evaluate symbols) |> List.reduce fadd |> fnormalize
+        | Sum xs -> xs |> List.map (evaluate2 (symbolValues, sysVarValues)) |> List.reduce fadd |> fnormalize
         | Product xs ->
-            let evall = xs |> List.map (evaluate symbols)
+            let evall = xs |> List.map (evaluate2 (symbolValues, sysVarValues))
             let reducel = evall |> List.reduce fmultiply
             reducel |> fnormalize
-        | Power (r, p) -> fpower (evaluate symbols r) (evaluate symbols p) |> fnormalize
-        | Function (f, x) -> fapply f (evaluate symbols x) |> fnormalize
-        | FunctionN (f, xs) -> xs |> List.map (evaluate symbols) |> fapplyN f |> fnormalize
+        | Power (r, p) -> fpower (evaluate2 (symbolValues, sysVarValues) r) (evaluate2 (symbolValues, sysVarValues) p) |> fnormalize
+        | Function (f, x) -> fapply f (evaluate2 (symbolValues, sysVarValues) x) |> fnormalize
+        | FunctionN (f, xs) -> xs |> List.map (evaluate2 (symbolValues, sysVarValues)) |> fapplyN f |> fnormalize
         | FunInvocation (Symbol fnm, xs) ->
+            //
+            let cal_param_fd_val () =
+                xs
+                |> List.map (fun exp ->
+                    evaluate2 (symbolValues, sysVarValues) exp
+                )
+
             let cal_param_obj_val () =
                 xs
                 |> List.map (fun exp ->
-                    evaluate symbols exp |> box//formatValueLambda 吃 value 傳入值
+                    evaluate2 (symbolValues, sysVarValues) exp |> box//formatValueLambda 吃 value 傳入值
                     //match evaluate symbols exp with
                     //| (Real v) -> box v
                     //| WTensor (DSTensor t) ->
@@ -1138,7 +1249,7 @@ module Evaluate =
             let cal_param_real_val () =
                 xs
                 |> List.map (fun exp ->
-                    match evaluate symbols exp with
+                    match evaluate2 (symbolValues, sysVarValues) exp with
                     | (FloatingPoint.Real v) -> v
                     | _ -> Double.NaN
                 )
@@ -1146,7 +1257,7 @@ module Evaluate =
             let cal_param_vec_val () =
                 xs
                 |> List.map (fun exp ->
-                    match evaluate symbols exp with
+                    match evaluate2 (symbolValues, sysVarValues) exp with
                     | (RealVector v) -> v
                     | _ -> failwithf "vector parameter is required for %s" fnm
                 )
@@ -1154,7 +1265,7 @@ module Evaluate =
             let cal_param_mat_vec_val () =
                 xs
                 |> List.map (fun exp ->
-                    match evaluate symbols exp with
+                    match evaluate2 (symbolValues, sysVarValues) exp with
                     | (FloatingPoint.RealVector v) -> FloatingPoint.RealVector v
                     | (FloatingPoint.RealMatrix v) -> FloatingPoint.RealMatrix v
                     | _ -> failwithf "vector parameter is required for %s" fnm
@@ -1164,7 +1275,7 @@ module Evaluate =
             let cal_param_list_of_vec_val () : TensorWrapper list =
                 xs
                 |> List.map (fun exp ->
-                    let evalrst = evaluate symbols exp
+                    let evalrst = evaluate2 (symbolValues, sysVarValues) exp
                     match evalrst with
                     | (FloatingPoint.RealVector v) ->
                         VecInTensor v //計算結果WTensor                    
@@ -1261,22 +1372,43 @@ module Evaluate =
                 | _ ->
                     failwithf "omg fnm!!!"
             else
+                let rec analysisFx (sl:Symbol list) (fxExpr:MathNet.Symbolics.Expression) =
+                    (*
+                        let _ =
+                            cur3fto1v "ma_base" ((
+                                fun cur cmid scale pos -> //vector [1.0;2;3]
+                                    printfn "cur => %A" cur //cur = 0 是用來表示"當根"
+                                    if scale = 30.0 || cmid <> 0 then //ES連續月目前以 0 表示
+                                        vector [1.5; 2.5; 3.5]
+                                    else
+                                        failwithf "scale not supported"
+    
+                                ), Symbol "cur")
+
+                        let _ =
+                            define "ma" ([Symbol "cmid"; Symbol "scale"; Symbol "pos"],
+                                SymbolicExpression.XParse "ma_base(cmid, scale, pos)")
+
+                    *) //evaluate2 (symbolValues, sysVarValues) frv
+                    match fxExpr with
+                    | FunInvocation ((Symbol sb), origParamExp) when funDict.ContainsKey sb -> //例如 funDict 包含 ma_base
+                        match funDict.[sb] with
+                        | DTExp (param2, fx2) -> analysisFx param2 fx2 //ma 的 定義 就是 FunInvocation (Symbol "ma_base", _)
+                        | KeyWord ->
+                            let substitute = ((Symbol sb), xs) 
+                            Choice2Of2 <| FunInvocation substitute
+                        | _ ->
+                            failwith "Nested FunInvocation haven't yet implemented"
+                    | FunInvocation ((Symbol sb), _) ->
+                        let substitute = ((Symbol sb), xs) 
+                        Choice2Of2 <| FunInvocation substitute
+                    | _ -> Choice1Of2 fxExpr //Choice1Of2 不是funInvoke
                 match funDict.[fnm] with
                 | DTExp (param, fx) ->
                     let param_val = cal_param_obj_val ()
-                    let rec analysisFx (fxExpr:MathNet.Symbolics.Expression) =
-                        match fxExpr with
-                        | FunInvocation ((Symbol sb), _) when funDict.ContainsKey sb ->
-                            match funDict.[sb] with
-                            | DTExp (param2, fx2) -> analysisFx fx2
-                            | _ ->
-                                let substitute = ((Symbol sb), xs) 
-                                Choice2Of2 <| FunInvocation substitute
-                        | FunInvocation ((Symbol sb), _) ->
-                            let substitute = ((Symbol sb), xs) 
-                            Choice2Of2 <| FunInvocation substitute
-                        | _ -> Choice1Of2 fxExpr //Choice1Of2 不是funInvoke
-                    let fx_real = analysisFx fx
+                    if param.Length <> param_val.Length then
+                        failwithf "%s parameter length not matched %A <-> %A" fnm param param_val
+                    let fx_real = analysisFx param fx
                     match fx_real with
                     | Choice1Of2 frv ->
                         let expr, cmpl = Compile.compileExpressionOrThrow2 frv param
@@ -1297,7 +1429,47 @@ module Evaluate =
                         //    |> Seq.append newSymbols
                         //    |> dict
 
-                        evaluate symbols frv
+                        evaluate2 (symbolValues, sysVarValues) frv
+
+                | DTProc procList ->
+                    let rec evalProc (sds:((Symbol list) * DefBody * (Symbol list)) list) (previousOutput:ConcurrentDictionary<string, FloatingPoint>) =
+                        match sds with
+                        | [] -> previousOutput
+                        | (_params, body, sysVars)::rest ->
+                            match body with
+                            | DBExp fxs ->
+                                let param_val:obj[] = cal_param_obj_val ()                    
+                                let step, rst =
+                                    fxs
+                                    |> Array.fold (fun (i, s) fx ->
+                                        let fx_real = analysisFx _params fx
+                                        match fx_real with
+                                        | Choice1Of2 frv ->
+                                            let expr, cmpl = Compile.compileExpressionOrThrow2 frv (List.append sysVars _params)
+                                            let rst2 =
+                                                if i = 0 then
+                                                    let passInSysVarValues =
+                                                        if sysVarValues.IsSome then
+                                                            sysVars |> List.map (fun sysVar -> box sysVarValues.Value[sysVar.SymbolName]) |> List.toArray
+                                                        else
+                                                            [||]
+                                                    cmpl.DynamicInvoke(Array.append passInSysVarValues param_val)
+                                                else
+                                                    cmpl.DynamicInvoke([|box s|])
+                                            ///ConcurrentDictionary<string, FloatingPoint> (dict [ "__output__", obj2FloatPoint rst ])
+                                            (i+1), obj2FloatPoint rst2
+                                        | Choice2Of2 frv ->     
+                                            //ConcurrentDictionary<string, FloatingPoint> (dict [ "__output__", evaluate2 (previousOutput, sysVarValues) frv ])
+                                            (i+1), evaluate2 (previousOutput, sysVarValues) frv
+
+                                    ) (0, Undef)
+                                ConcurrentDictionary<string, FloatingPoint> (dict [ "__output__",  rst])
+                            | DBFun f ->
+                                let rst = f previousOutput (cal_param_fd_val ())                                
+                                evalProc rest rst
+                    let cd = evalProc procList (ConcurrentDictionary<_, _> symbolValues)
+                    cd["__output__"]
+
                 | DTFunI1toI1 f ->
                     let param_val = cal_param_real_val ()
                     f (int param_val.[0]) |> float |> Real
@@ -1306,14 +1478,18 @@ module Evaluate =
                     f param_val.[0] param_val.[1] |> RealVector
                 | DTCurF2toV1 (f, (Symbol sym)) ->
                     let param_val = cal_param_real_val ()
-                    let cur = symbols.[sym].RealValue
+                    let cur = symbolValues.[sym].DecimalValue
                     f cur param_val.[0] param_val.[1] |> RealVector
                 | DTCurF3toV1 (f, (Symbol sym)) ->
                     let param_val = cal_param_real_val ()
-                    let cur = symbols.[sym].RealValue
+                    let cur = symbolValues.[sym].DecimalValue
                     f cur param_val.[0] param_val.[1] param_val.[2] |> RealVector
                 | DTFunAction f ->
                     f ()
                     Undef
 
+
+    [<CompiledName("Evaluate")>]
+    let rec evaluate (symbols:IDictionary<string, FloatingPoint>) =
+        evaluate2 (symbols, None)
     Linq.ExprHelper.evaluate <- evaluate

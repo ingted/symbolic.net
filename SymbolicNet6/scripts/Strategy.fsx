@@ -1,6 +1,6 @@
 //#r @"..\src\Symbolics\bin\Debug\netstandard2.0\MathNet.Symbolics.dll"
-#r @"..\SymbolicNet6\bin\Debug\net9.0\SymbolicNet6.dll"
-#r @".\FsProfiler\FsProfiler.dll"
+#r @"..\..\SymbolicNet6\bin\Debug\net9.0\SymbolicNet6.dll"
+#r @"..\..\scripts\FsProfiler\FsProfiler.dll"
 #r @"nuget: MathNet.Numerics"
 #r @"nuget:FsUnit"
 #r @"nuget:FParsec"
@@ -8,6 +8,7 @@
 #r "nuget: DiffSharp.Core, 1.0.7"
 #r "nuget: DiffSharp.Backends.Reference, 1.0.7"
 #r "nuget: DiffSharp.Backends.Torch, 1.0.7"
+#r @"G:\coldfar_py\sharftrade9\πÍ≈Á\SharFTrade.Exp\bin2\net9.0\protobuf-net.Core.dll"
 //#I @"..\SymbolicNet6"
 //#load @".\Symbols.fs"
 //#load @".\Approximation.fs"
@@ -34,7 +35,7 @@
 //#load @".\Linq.fs"
 //#load @".\Compile.fs"
 //#load @".\Evaluate.fs"
-#load @"..\SymbolicNet6.Test\Global.fs"
+#load @"..\..\SymbolicNet6.Test\Global.fs"
 
 open MathNet.Numerics
 open MathNet.Symbolics
@@ -50,6 +51,8 @@ let symW = Symbol "w"
 let symX = Symbol "x"
 let symY = Symbol "y"
 let symZ = Symbol "z"
+
+
 
 open Definition
 
@@ -77,11 +80,23 @@ let changeIt2 (oo:int[]) =
 
 changeIt2 o
 
+
+Infix.parseOrThrow "sum(i, 1, n, i^2)"//§£§‰¥©
+
+SymbolicExpression(Sum([Number<|BigRational.FromInt 1;Number <| BigRational.FromInt 1 ])).Evaluate(dict [])
+LaTeX.format (Sum([Number<|BigRational.FromInt 1;Number <| BigRational.FromInt 1;Number <| BigRational.FromInt 2 ]))
+
+
 define "test" ([symV; symW], (v + w) * 2)
 define "test1" ([symV; symW], Infix.parseOrThrow("test(v, w)"))
-SymbolicExpression(Infix.parseOrThrow("2^test(x, 2 * x)")).Evaluate(dict[ "x", FloatingPoint.Real 2.0; ])
-SymbolicExpression(Infix.parseOrThrow("2^test(x, 2 * x)")).Evaluate(dict[ "x", MathNet.Symbolics.Value.FromInt 2; ])
-SymbolicExpression(Infix.parseOrThrow("2^test1(x, 2 * x)")).Evaluate(dict[ "x", FloatingPoint.Real 2.0; ])
+define "sum" ([symV; symW; symX], Infix.parseOrThrow(""))
+
+LaTeX.format (Infix.parseOrThrow("1 + v"))
+SymbolicExpression(Infix.parseOrThrow("2^test(test(x, -2), 2 * x)")).Evaluate(dict [ "x", FloatingPoint.Real 2.0; ])
+SymbolicExpression(Infix.parseOrThrow("acos(1)")).Evaluate(dict [])
+SymbolicExpression(Infix.parseOrThrow("sum(1,2,3)")).Evaluate(dict [])
+//SymbolicExpression(Infix.parseOrThrow("2^test(x, 2 * x)")).Evaluate(dict [ "x", MathNet.Symbolics.Value.fromSingle 2.0; ])
+SymbolicExpression(Infix.parseOrThrow("2^test1(x, 2 * x)")).Evaluate(dict [ "x", FloatingPoint.Real 2.0; ])
 
 SymbolicExpression(Infix.parseOrThrow("2^test1(x, 2 * x)")).Expression.ToString()
 Infix.parseOrThrow("2^test1(x, 2 * x)").ToString()

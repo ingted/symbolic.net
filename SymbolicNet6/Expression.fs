@@ -1,8 +1,14 @@
 ﻿namespace MathNet.Symbolics
 
 open MathNet.Numerics
+open MathNet.Numerics.LinearAlgebra
 open MathNet.Symbolics
+open System.Collections.Concurrent
+open PersistedConcurrentSortedList
+open Deedle
+open DiffSharp
 
+type VarName = string //不同於 parameter
 [<StructuralEquality;NoComparison>]
 type Expression =
     | Number of BigRational
@@ -20,6 +26,106 @@ type Expression =
     | PositiveInfinity
     | NegativeInfinity
     | Undefined
+
+
+and TensorWrapper =
+| DSTensor of Tensor
+| VecInTensor of Vector<float>
+| ListOf of TensorWrapper list
+
+and [<NoComparison>] FloatingPoint =
+    | Real of float
+    | Complex of complex
+    | RealVector of Vector<float>
+    | ComplexVector of Vector<complex>
+    | RealMatrix of Matrix<float>
+    | ComplexMatrix of Matrix<complex>
+    | Undef
+    | PosInf
+    | NegInf
+    | ComplexInf
+    | Decimal of decimal
+    | Int of int
+    | WTensor of TensorWrapper
+    | Context of ConcurrentDictionary<VarName, FloatingPoint>
+    | FC of fCell<string>
+    | Frame of Frame<string, int64>
+    | Series of ObjectSeries<int64>
+    | NestedExpr of Expression list
+    | NestedList of FloatingPoint list
+    | NestedMap of ConcurrentDictionary<string, FloatingPoint>
+    | NestedSet of ConcurrentBag<FloatingPoint>
+
+    // Simpler usage in C#
+    static member op_Implicit (x:float) = Real x
+    static member op_Implicit (x:float32) = Real (float x)
+    static member op_Implicit (x:complex) = Complex x
+    static member op_Implicit (x:complex32) = Complex (Primitive.complex x)
+    static member op_Implicit (x:Vector<float>) = RealVector x
+    static member op_Implicit (x:Vector<complex>) = ComplexVector x
+    static member op_Implicit (x:Matrix<float>) = RealMatrix x
+    static member op_Implicit (x:Matrix<complex>) = ComplexMatrix x
+    static member op_Implicit (x:Tensor) = WTensor <| DSTensor x
+    static member op_Implicit (x:fCell<string>) = FC x
+    static member op_Implicit (x:Frame<string, int64>) = Frame x
+    static member op_Implicit (x:ObjectSeries<int64>) = Series x
+    static member (*) ((a:FloatingPoint), (b: FloatingPoint)) =
+        Real 0
+    static member (*) ((a:float), (b: FloatingPoint)) =
+        Real 0
+    static member (*) ((a:FloatingPoint), (b: float)) =
+        Real 0 
+    member x.RealValue =
+        match x with
+        | Real x -> x
+        | Complex x when x.IsReal() -> x.Real
+        | Decimal x -> float x
+        | _ -> failwith "Value not convertible to a real number."
+    member x.DecimalValue =
+        match x with
+        | Real x -> decimal x
+        | Complex x when x.IsReal() -> decimal x.Real
+        | Decimal x -> x
+        | _ -> failwith "Value not convertible to a real number."
+    member x.ComplexValue =
+        match x with
+        | Real x -> complex x 0.0
+        | Complex x -> x
+        | Decimal x -> complex (float x) 0.0
+        | _ -> failwith "Value not convertible to a complex number."
+    member x.RealVectorValue =
+        match x with
+        | RealVector x -> x
+        | _ -> failwith "Value not convertible to a real vector."
+    member x.ComplexVectorValue =
+        match x with
+        | ComplexVector x -> x
+        | _ -> failwith "Value not convertible to a complex vector."
+    member x.RealMatrixValue =
+        match x with
+        | RealMatrix x -> x
+        | _ -> failwith "Value not convertible to a real matrix."
+    member x.ComplexMatrixValue =
+        match x with
+        | ComplexMatrix x -> x
+        | _ -> failwith "Value not convertible to a complex matrix."
+    member x.DTensorValue =
+        match x with
+        | WTensor (DSTensor x) -> x
+        | _ -> failwith "Value not convertible to a DSTensor."
+    member x.FrameValue =
+        match x with
+        | Frame x -> x
+        | _ -> failwith "Value not convertible to a Frame."
+    member x.FCValue =
+        match x with
+        | FC x -> x
+        | _ -> failwith "Value not convertible to a fCell."
+    member x.SeriesValue =
+        match x with
+        | Series x -> x
+        | _ -> failwith "Value not convertible to a Series."
+
 
 
 [<RequireQualifiedAccess>]
@@ -169,7 +275,7 @@ module Operators =
     let isComplexInfinity : Expression -> bool  = function | ComplexInfinity -> true | _ -> false
     let isInfinity : Expression -> bool  = function | PositiveInfinity | ComplexInfinity | NegativeInfinity -> true | _ -> false
 
-    let isApproximateZero : Expression -> bool  = function | Zero -> true | Approximation (Real r) when r = 0.0 -> true | _ -> false
+    let isApproximateZero : Expression -> bool  = function | Zero -> true | Approximation (Approximation.Real r) when r = 0.0 -> true | _ -> false
 
     let internal orderRelation (x:Expression) (y:Expression) : bool  =
         let rec compare a b =
@@ -336,8 +442,8 @@ module Operators =
         | One, b | b, One -> b
         | Zero, oo | oo, Zero when isInfinity oo -> undefined
         | Zero, _ | _, Zero -> zero
-        | Approximation (Real a), oo | oo, Approximation (Real a) when a = 0.0 && isInfinity oo -> undefined
-        | Approximation (Real a), _ | _, Approximation (Real a) when a = 0.0 -> Approximation (Real 0.0)
+        | Approximation (Approximation.Real a), oo | oo, Approximation (Approximation.Real a) when a = 0.0 && isInfinity oo -> undefined
+        | Approximation (Approximation.Real a), _ | _, Approximation (Approximation.Real a) when a = 0.0 -> Approximation (Approximation.Real 0.0)
         | ComplexInfinity, _ | _, ComplexInfinity -> complexInfinity
         | PositiveInfinity, Positive | Positive, PositiveInfinity -> infinity
         | PositiveInfinity, Negative | Negative, PositiveInfinity -> negativeInfinity

@@ -39,8 +39,8 @@ module TypedExpression =
 
         let rec convert = function
             | Number n -> TypedExpression.Number (ValueType.Rational, n)
-            | Approximation (Real _ as a) -> TypedExpression.Approximation (ValueType.Real, a)
-            | Approximation (Complex _ as a) -> TypedExpression.Approximation (ValueType.Complex, a)
+            | Approximation (Approximation.Real _ as a) -> TypedExpression.Approximation (ValueType.Real, a)
+            | Approximation (Approximation.Complex _ as a) -> TypedExpression.Approximation (ValueType.Complex, a)
             | Identifier s -> TypedExpression.Identifier (symbols |> Map.find s, s)
             | Argument s -> TypedExpression.Identifier (symbols |> Map.find s, s)
             | Constant ((E | Pi) as c) -> TypedExpression.Constant (ValueType.Real, c)

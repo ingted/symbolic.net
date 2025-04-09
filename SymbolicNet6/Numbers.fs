@@ -10,7 +10,7 @@ module Numbers =
 
     /// Represent the constant as a real number if possible
     let (|RealConstant|_|) = function
-        | Approximation (Real r) -> Some r
+        | Approximation (Approximation.Real r) -> Some r
         | Constant E -> Some Constants.E
         | Constant Pi -> Some Constants.Pi
         | ComplexInfinity -> Some System.Double.PositiveInfinity

@@ -16,7 +16,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Misc", "Misc", "{2EF66F82-4
 		expr.test.fsx = expr.test.fsx
 		linqExpTest.20220320.fsx = linqExpTest.20220320.fsx
 		linqExpTest.fsx = linqExpTest.fsx
-		Scripts\Strategy.fsx = Scripts\Strategy.fsx
+		Scripts\Strategy20250406.fsx = Scripts\Strategy20250406.fsx
 	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "testExpr", "testExpr\testExpr.csproj", "{9DB80155-B433-4630-B0EE-FB245F789B55}"

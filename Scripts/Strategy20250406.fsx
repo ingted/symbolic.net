@@ -1,7 +1,7 @@
 //#r @"..\src\Symbolics\bin\Debug\netstandard2.0\MathNet.Symbolics.dll"
 #r @"..\SymbolicNet6\bin\Debug\net9.0\SymbolicNet6.dll"
 #r @".\FsProfiler\FsProfiler.dll"
-#r @"nuget: MathNet.Numerics"
+#r @"nuget: MathNet.Numerics, 5.0.0"
 #r @"nuget:FsUnit"
 #r @"nuget:FParsec"
 #r @"nuget:MathNet.Numerics.FSharp"
@@ -55,6 +55,36 @@ open Definition
 
 open System.Linq.Expressions
 
+[<RequireQualifiedAccess>]
+type Value =
+    | Number of BigRational
+    | Approximation of Approximation
+    | ComplexInfinity
+    | PositiveInfinity
+    | NegativeInfinity
+    | Undefined
+    with 
+        static member (+) (vl : Value, vr : Value) =
+            match vl with
+            | Number vlv ->
+                match vr with
+                | Number vrv ->
+                    vlv * vrv
+        static member (*) (vl : Value, vr : float) =
+            match vl with
+            | Approximation (Real vlv) ->
+                vlv * vr
+        static member (+) (vl : Value, vr : float) =
+            match vl with
+            | Approximation (Real vlv) ->
+                vlv + vr
+        static member (+) (vl : float, vr : Value) =
+            match vr with
+            | Approximation vrv ->
+                match vrv with
+                | Approximation.Real vrvv ->
+                    vl + vrvv
+
 let addB = Expression.Parameter(typeof<System.Double>, "b")
 let addC = Expression.Parameter(typeof<MathNet.Symbolics.Value>, "c")
 
@@ -80,7 +110,6 @@ changeIt2 o
 define "test" ([symV; symW], (v + w) * 2)
 define "test1" ([symV; symW], Infix.parseOrThrow("test(v, w)"))
 SymbolicExpression(Infix.parseOrThrow("2^test(x, 2 * x)")).Evaluate(dict[ "x", FloatingPoint.Real 2.0; ])
-SymbolicExpression(Infix.parseOrThrow("2^test(x, 2 * x)")).Evaluate(dict[ "x", MathNet.Symbolics.Value.FromInt 2; ])
 SymbolicExpression(Infix.parseOrThrow("2^test1(x, 2 * x)")).Evaluate(dict[ "x", FloatingPoint.Real 2.0; ])
 
 SymbolicExpression(Infix.parseOrThrow("2^test1(x, 2 * x)")).Expression.ToString()
