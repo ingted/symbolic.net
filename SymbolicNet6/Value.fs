@@ -20,6 +20,7 @@ type Value =
     | ComplexVec of Vector<complex>
     | RealMat of Matrix<float>
     | ComplexMat of Matrix<complex>
+    | Empty
     | DSTen of Tensor
     with 
         static member (+) (vl : Value, vr : Value) =
@@ -28,6 +29,12 @@ type Value =
                 match vr with
                 | Number vrv ->
                     Number (vlv * vrv)
+            | RealVec vlv ->
+                match vr with
+                | Approximation (Real vrv) ->
+                    RealVec (vlv + vrv)
+                | RealVec vrv ->
+                    RealVec (vlv + vrv)
             | Approximation (Real vlv) ->
                 match vr with
                 | Approximation (Real vrv) ->
@@ -52,9 +59,16 @@ type Value =
                 match vrv with
                 | Approximation.Real vrvv ->
                     Approximation (Real (vl + vrvv))
+            | RealVec rv ->
+                RealVec (rv + vl)
             | DSTen dt ->
                 DSTen (vl + dt)
-        
+        static member (*) (a: Value, b: Value) =
+            match a, b with
+            | Value.Approximation (Complex c), Value.Approximation y -> Value.Approximation (Complex (c * (y.ComplexValue)))
+            | Value.Approximation x, Value.Approximation (Complex c) -> Value.Approximation (Complex ((x.ComplexValue) * c))
+            | Value.Approximation (Real x), Value.Approximation (Real y) -> Value.Approximation (Real (x * y))
+            | _ -> failwith "Multiply not supported for these"
     
 
 [<RequireQualifiedAccess>]

@@ -27,7 +27,6 @@ type Expression =
     | NegativeInfinity
     | Undefined
 
-
 and TensorWrapper =
 | DSTensor of Tensor
 | VecInTensor of Vector<float>
@@ -126,7 +125,32 @@ and [<NoComparison>] FloatingPoint =
         | Series x -> x
         | _ -> failwith "Value not convertible to a Series."
 
-
+module ExpressionHelpFun =
+    open System.Collections.Concurrent
+    let collectIdentifiers (expr: Expression) : ConcurrentBag<Symbol> =
+        let rec collect (expr: Expression) (acc: ConcurrentBag<Symbol>) =
+            match expr with
+            | Identifier symbol ->
+                acc.Add(symbol)
+                acc
+            | Sum expressions
+            | Product expressions
+            | FunctionN (_, expressions) ->
+                expressions
+                |> List.fold (fun s e -> collect e s) acc
+                
+            | Power (baseExpr, expExpr) ->
+                collect baseExpr acc |> ignore
+                collect expExpr acc
+            | Function (_, innerExpr) ->
+                collect innerExpr acc
+            | FunInvocation (_, paramExprs) ->
+                paramExprs
+                |> List.fold (fun s e -> collect e s) acc
+            | _ ->
+                acc
+        let acc = ConcurrentBag<Symbol>()
+        collect expr acc
 
 [<RequireQualifiedAccess>]
 module Values =

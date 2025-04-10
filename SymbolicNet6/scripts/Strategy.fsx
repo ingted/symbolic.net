@@ -1,7 +1,9 @@
 //#r @"..\src\Symbolics\bin\Debug\netstandard2.0\MathNet.Symbolics.dll"
-#r @"..\..\SymbolicNet6\bin\Debug\net9.0\SymbolicNet6.dll"
+#I @"..\..\SymbolicNet6\bin\Debug\net9.0\"
+#r @"SymbolicNet6.dll"
 #r @"..\..\scripts\FsProfiler\FsProfiler.dll"
-#r @"nuget: MathNet.Numerics"
+//#r @"nuget: MathNet.Numerics"
+#r @"MathNet.Numerics.dll"
 #r @"nuget:FsUnit"
 #r @"nuget:FParsec"
 #r @"nuget:MathNet.Numerics.FSharp"
@@ -80,6 +82,11 @@ let changeIt2 (oo:int[]) =
 
 changeIt2 o
 
+
+open MathNet.Numerics.LinearAlgebra
+
+let s_ = seq [1.0; 2.0; 3.0]
+let v_ : Vector<float> = Vector<float>.Build.DenseOfEnumerable(s_)
 
 Infix.parseOrThrow "sum(i, 1, n, i^2)"//¤£¤ä´©
 
