@@ -43,7 +43,7 @@ let main argv =
             fun cur cmid scale pos -> //vector [1.0;2;3]
                 printfn "cur => %A" cur //cur = 0 是用來表示"當根"
                 if scale = 30.0 || cmid <> 0 then //ES連續月目前以 0 表示
-                    vector [1.5; 2.5; 3.5 + cur]
+                    vector [1.5; 2.5; 3.5 + float cur]
                 else
                     failwithf "scale not supported"
     

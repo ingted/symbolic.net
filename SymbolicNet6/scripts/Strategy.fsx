@@ -102,6 +102,8 @@ LaTeX.format (Infix.parseOrThrow("1 + v"))
 SymbolicExpression(Infix.parseOrThrow("2^test(test(x, -2), 2 * x)")).Evaluate(dict [ "x", FloatingPoint.Real 2.0; ])
 SymbolicExpression(Infix.parseOrThrow("acos(1)")).Evaluate(dict [])
 SymbolicExpression(Infix.parseOrThrow("sum(1,2,3)")).Evaluate(dict [])
+
+SymbolicExpression(Infix.parseOrThrow("x")).Evaluate(dict ["x", FloatingPoint.Real 2.0])
 //SymbolicExpression(Infix.parseOrThrow("2^test(x, 2 * x)")).Evaluate(dict [ "x", MathNet.Symbolics.Value.fromSingle 2.0; ])
 SymbolicExpression(Infix.parseOrThrow("2^test1(x, 2 * x)")).Evaluate(dict [ "x", FloatingPoint.Real 2.0; ])
 
@@ -141,6 +143,9 @@ SymbolicExpression(cFun("test", [x + (fromInt32 10); (fromDouble 100.0)])*2).Eva
 
 let symbolsd = dict [ "x", FloatingPoint.Real 9.0; ]
 SymbolicExpression(cFun("test1", [x + (fromInt32 10); (fromDouble 100.0)])*2).Evaluate(symbolsd)
+
+
+Linq.formatComplexLambda (Infix.parseOrThrow "x") [(Symbol "x")]
 
 
 let syml = dict [ "x", FloatingPoint.Real 9.0; ]

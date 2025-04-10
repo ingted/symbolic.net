@@ -435,7 +435,7 @@ module Linq =
 
                     Some (vLambda :> Expression)
                 //| DTCurF3toV1 (f, (Symbol sym)) ->
-                | _ ->
+                | compSupp ->
                     failwithf "havent yet supported compilation"
             | Identifier(sym) ->
                 Option.map (fun x -> x :> Expression) (getParam sym)
@@ -1214,7 +1214,7 @@ module Evaluate =
             failwithf "orz 0005"
 
     [<CompiledName("Evaluate2")>]
-    let rec evaluate2 (symbolValues:ConcurrentDictionary<string, FloatingPoint>, sysVarValues:ConcurrentDictionary<string, FloatingPoint> option) = function
+    let rec evaluate2 (symbolValues:ConcurrentDictionary<string, FloatingPoint>, sysVarValues:IDictionary<string, FloatingPoint> option) = function
         | Number n -> Real (float n) |> fnormalize
         | Undefined -> Undef
         | ComplexInfinity -> ComplexInf
@@ -1228,7 +1228,11 @@ module Evaluate =
         | Identifier (Symbol s) ->
             match symbolValues.TryGetValue s with
             | true, a -> a |> fnormalize
-            | _ -> failwithf  "Failed to find symbol %s" s
+            | _ ->
+                match sysVarValues.Value.TryGetValue s with
+                | true, a -> a |> fnormalize
+                | _ ->
+                    failwithf  "Failed to find symbol %s" s
         | Argument (Symbol s) -> failwithf  "Cannot evaluate a argument %s" s
         | Sum xs -> xs |> List.map (evaluate2 (symbolValues, sysVarValues)) |> List.reduce fadd |> fnormalize
         | Product xs ->
@@ -1484,12 +1488,13 @@ module Evaluate =
                     (sl: Symbol list)
                     (fxExpr: MathNet.Symbolics.Expression)
                     (symbolValues_: ConcurrentDictionary<string, FloatingPoint>)
+                    (sysVarValues_: IDictionary<string, FloatingPoint> option)
                     : (Symbol list) * (MathNet.Symbolics.Expression) =
 
                     let exprMap sl_ (exprs:MathNet.Symbolics.Expression list) =
                         exprs
                         |> List.fold (fun (symL, uExprs) expr ->
-                            let usl, uExpr = nestedFxHandler symL expr symbolValues_
+                            let usl, uExpr = nestedFxHandler symL expr symbolValues_ sysVarValues_
                             usl, uExprs @ [uExpr]
                         ) (sl_, [])
 
@@ -1503,11 +1508,11 @@ module Evaluate =
                             let updatedSL, uExprs = exprMap sl_ terms
                             updatedSL, Product uExprs
                         | Power (baseExpr, expExpr) ->
-                            let updatedSL, uExpr = nestedFxHandler sl_ baseExpr symbolValues_
-                            let updatedSL2, uExpExpr = nestedFxHandler updatedSL expExpr symbolValues_
+                            let updatedSL, uExpr = nestedFxHandler sl_ baseExpr symbolValues_ sysVarValues_
+                            let updatedSL2, uExpExpr = nestedFxHandler updatedSL expExpr symbolValues_ sysVarValues_
                             updatedSL2, Power (uExpr, uExpExpr)
                         | Function (func, arg) ->
-                            let updatedSL, uExpr = nestedFxHandler sl_ arg symbolValues_
+                            let updatedSL, uExpr = nestedFxHandler sl_ arg symbolValues_ sysVarValues_
                             updatedSL, Function (func, uExpr)
                         | FunctionN (func, args) ->
                             let updatedSL, uExprs = exprMap sl_ args
@@ -1519,21 +1524,41 @@ module Evaluate =
                     | FunInvocation ((Symbol sb), origParamExp) when Definition.funDict.ContainsKey sb ->
                         match Definition.funDict[sb] with
                         | DTExp (param2, fx2) ->
-                            nestedFxHandler param2 fx2 symbolValues_
+                            nestedFxHandler param2 fx2 symbolValues_ sysVarValues_
                         | KeyWord ->
                             // 將非 DTExp 的 FunInvocation 替換為符號
-                            let newSymbolName = $"__{sb}_{Guid.NewGuid().ToString()}__"
-                            let newSymbol = Symbol newSymbolName
+                            let 不好用_最好維持原始_expression_list () =
+                                let newSymbolName = $"__{sb}_{Guid.NewGuid().ToString()}__"
+                                let newSymbol = Symbol newSymbolName
 
-                            // 計算 FunInvocation 的值
+                                // 計算 FunInvocation 的值
+                                let evaluatedValue =
+                                    let paramValues = origParamExp |> List.map (fun param -> evaluate2 (symbolValues_, sysVarValues_) param)
+                                    NestedList paramValues
+
+                                // 將符號和值存入 symbolValues
+                                symbolValues_.TryAdd(newSymbolName, evaluatedValue) |> ignore
+                                //sl, Identifier newSymbol
+                                sl, FunInvocation ((Symbol sb), [Identifier newSymbol])
+
                             let evaluatedValue =
-                                let paramValues = origParamExp |> List.map (fun param -> evaluate2 (symbolValues_, sysVarValues) param)
-                                NestedList paramValues
-
-                            // 將符號和值存入 symbolValues
-                            symbolValues_.TryAdd(newSymbolName, evaluatedValue) |> ignore
-                            sl, Identifier newSymbol
+                                origParamExp
+                                |> List.map (fun param ->
+                                    let newSymbolName = $"__{sb}_{Guid.NewGuid().ToString()}__"
+                                    let newSymbol = Symbol newSymbolName
+                                    let paramValue = evaluate2 (symbolValues_, sysVarValues_) param
+                                    symbolValues_.TryAdd(newSymbolName, paramValue) |> ignore
+                                    Identifier newSymbol
+                                )
                             
+                            //sl, FunInvocation ((Symbol sb), evaluatedValue)
+
+                            let newSymbolNameAggRst = $"__{sb}_{Guid.NewGuid().ToString()}__"
+                            let newSymbolAggRst = Symbol newSymbolNameAggRst
+                            let evaluatedFunValue = evaluate2 (symbolValues_, sysVarValues_) (FunInvocation ((Symbol sb), evaluatedValue))
+                            symbolValues_.TryAdd(newSymbolNameAggRst, evaluatedFunValue) |> ignore
+                            sl, Identifier newSymbolAggRst
+
                     | FunInvocation _ ->
                         failwith "Undefined func"
                         
@@ -1551,17 +1576,26 @@ module Evaluate =
                 | DTExp (param, fx) ->
                     if param.Length <> paramValueExprList.Length then
                         failwithf "%s parameter length not matched %A <-> %A" fnm param paramValueExprList
-                    let uSL, frv = nestedFxHandler param fx symbolValues
+                    let passIn =
+                        param
+                        |> Seq.mapi (fun i sb -> sb.SymbolName, evaluate2 (symbolValues, sysVarValues) paramValueExprList[i])
 
+                    let uSL, frv = nestedFxHandler param fx symbolValues (Some (dict passIn))
 
-                    let expr, cmpl = Compile.compileExpressionOrThrow2 frv uSL
-                    let param_val = cal_param_obj_val ()
+                    match frv with
+                    | Identifier newSymbol ->
+                        symbolValues[newSymbol.SymbolName]
+                    | FunInvocation _ ->
+                        evaluate2 (symbolValues, sysVarValues) frv
+                    | _ ->
+                        let expr, cmpl = Compile.compileExpressionOrThrow2 frv uSL
+                        let param_val = cal_param_obj_val ()
                           
-                    let rst =
-                        cmpl.DynamicInvoke(
-                            Array.append param_val (uSL |> List.skip param.Length |> List.map (fun s -> box symbolValues[s.SymbolName]) |> List.toArray)
-                        )
-                    obj2FloatPoint rst
+                        let rst =
+                            cmpl.DynamicInvoke(
+                                Array.append param_val (uSL |> List.skip param.Length |> List.map (fun s -> box symbolValues[s.SymbolName]) |> List.toArray)
+                            )
+                        obj2FloatPoint rst
 
 
                     //match fx_real with
