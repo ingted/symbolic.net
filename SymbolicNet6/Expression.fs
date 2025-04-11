@@ -6,7 +6,9 @@ open MathNet.Symbolics
 open System.Collections.Concurrent
 open PersistedConcurrentSortedList
 open Deedle
+#if TENSOR_SUPPORT
 open DiffSharp
+#endif
 
 type VarName = string //不同於 parameter
 [<StructuralEquality;NoComparison>]
@@ -28,7 +30,9 @@ type Expression =
     | Undefined
 
 and TensorWrapper =
+#if TENSOR_SUPPORT
 | DSTensor of Tensor
+#endif
 | VecInTensor of Vector<float>
 | ListOf of TensorWrapper list
 
@@ -64,7 +68,9 @@ and [<NoComparison>] FloatingPoint =
     static member op_Implicit (x:Vector<complex>) = ComplexVector x
     static member op_Implicit (x:Matrix<float>) = RealMatrix x
     static member op_Implicit (x:Matrix<complex>) = ComplexMatrix x
+#if TENSOR_SUPPORT
     static member op_Implicit (x:Tensor) = WTensor <| DSTensor x
+#endif
     static member op_Implicit (x:fCell<string>) = FC x
     static member op_Implicit (x:Frame<string, int64>) = Frame x
     static member op_Implicit (x:ObjectSeries<int64>) = Series x
@@ -108,10 +114,12 @@ and [<NoComparison>] FloatingPoint =
         match x with
         | ComplexMatrix x -> x
         | _ -> failwith "Value not convertible to a complex matrix."
+#if TENSOR_SUPPORT
     member x.DTensorValue =
         match x with
         | WTensor (DSTensor x) -> x
         | _ -> failwith "Value not convertible to a DSTensor."
+#endif
     member x.FrameValue =
         match x with
         | Frame x -> x

@@ -61,7 +61,7 @@ let main argv =
 
     let _ =
         define "ma" ([Symbol "cmid"; Symbol "scale"; Symbol "pos"],
-            SymbolicExpression.XParse "ma_base(cmid, scale, pos + 1)")
+            SymbolicExpression.XParse "5 * ma_base(cmid, scale, pos + 1)")
 
     let symbols = dict ["cur", MathNet.Symbolics.FloatingPoint.Real 99.0]
     let mabv = SymbolicExpression.Parse("ma_base(0.0, 30.0, 0.0)").Evaluate(symbols)

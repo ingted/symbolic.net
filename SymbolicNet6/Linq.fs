@@ -12,7 +12,9 @@ open Operators
 //open Evaluate
 open MathNet.Numerics.LinearAlgebra
 open Definition
+#if TENSOR_SUPPORT
 open DiffSharp
+#endif
 open System.Collections.Concurrent
 open PersistedConcurrentSortedList
 open Deedle
@@ -210,7 +212,9 @@ module Linq =
                 Value.RealVec rv
             | RealMatrix rm ->
                 Value.RealMat rm
+#if TENSOR_SUPPORT
             | WTensor (DSTensor dt) -> Value.DSTen dt
+#endif
             | NestedList l ->
                 //let ll = l |> List.map h
                 if l.Length = 0 then
@@ -960,8 +964,12 @@ module Evaluate =
             failwithf "listOf2Obj orz"
 
     let listOf2DSTensor (wt0:TensorWrapper) =
+#if TENSOR_SUPPORT
         let fArray, shapeReversed = listOf2Obj (wt0, [])
         dsharp.view ((dsharp.tensor fArray), shapeReversed |> Seq.rev)
+#else
+        failwithf "Tensor not supported"
+#endif
 
     //module orz = 
     //    type A =
@@ -1055,7 +1063,9 @@ module Evaluate =
         | PosInf, _ | _, PosInf -> PosInf
         | NegInf, _ | _, NegInf -> NegInf
         //| WTensor (DSTensor dt), Real y -> WTensor (DSTensor (dt + y))
+#if TENSOR_SUPPORT
         | Real x, WTensor (DSTensor dt) -> WTensor (DSTensor (x + dt))
+#endif
         | _ -> failwith "not supported"
 
     let fmultiply u v =
@@ -1077,7 +1087,9 @@ module Evaluate =
             if x < 0.0 then PosInf else if x > 0.0 then NegInf else Undef
         | PosInf, _ | _, PosInf -> PosInf
         | NegInf, _ | _, NegInf -> NegInf
+#if TENSOR_SUPPORT
         | Real x, WTensor (DSTensor t) -> WTensor (DSTensor (x * t))
+#endif
         | _ -> failwith "not supported"
 
     let fpower u v =
@@ -1199,15 +1211,19 @@ module Evaluate =
         | :? FloatingPoint as fp -> fp
         | :? Vector<float> as v -> v |> RealVector
         | :? Matrix<float> as v -> v |> RealMatrix
+#if TENSOR_SUPPORT
         | :? Tensor as t -> WTensor (DSTensor t)
+#endif
         | :? Value as v ->
             match v with
             | MathNet.Symbolics.Value.Approximation r ->
                 match r with
                 | Approximation.Real rr ->
                     rr |> Real
+#if TENSOR_SUPPORT
             | MathNet.Symbolics.Value.DSTen dt ->
                 WTensor (DSTensor dt)
+#endif
             | MathNet.Symbolics.Value.RealVec rv ->
                 RealVector rv
         | _ ->
@@ -1321,10 +1337,14 @@ module Evaluate =
                     let m2 = mbr()
                     RealMatrix <| m2.Transpose()
                 | "htensor" -> //可以知道自己是最上層，回傳 tensor
+#if TENSOR_SUPPORT
                     let param_val = cal_param_list_of_vec_val ()
                     if param_val.Length <> 1 then                        
                         failwithf "htensor only takes single list_of expression as input"
                     WTensor (DSTensor <| listOf2DSTensor param_val.[0])
+#else
+                    failwithf "Tensor not supported"
+#endif
                 //| "htensor2" -> //可以知道自己是最上層，回傳 tensor
                 //    let param_val = cal_param_list_of_vec_val ()
                 //    if param_val.Length <> 2 then                        
@@ -1522,9 +1542,31 @@ module Evaluate =
 
                     match fxExpr with
                     | FunInvocation ((Symbol sb), origParamExp) when Definition.funDict.ContainsKey sb ->
-                        match Definition.funDict[sb] with
+                        let def = Definition.funDict[sb]
+                        match def with
                         | DTExp (param2, fx2) ->
                             nestedFxHandler param2 fx2 symbolValues_ sysVarValues_
+                        | DTFunI1toI1 _
+                        //    let param_val = cal_param_real_val ()
+                        //    f (int param_val.[0]) |> float |> Real
+                        | DTFunF2toV1 _
+                        //    let param_val = cal_param_real_val ()
+                        //    f param_val.[0] param_val.[1] |> RealVector
+                        | DTCurF2toV1 _
+                        //    let param_val = cal_param_real_val ()
+                        //    let cur = symbolValues.[sym].DecimalValue
+                        //    f cur param_val.[0] param_val.[1] |> RealVector
+                        //    f ()
+                        //    Undef
+                        | DTCurF3toV1 _ 
+                        | DTFunAction _ ->
+                            let newSymbolNameAggRst = $"__{sb}_{Guid.NewGuid().ToString()}__"
+                            let newSymbolAggRst = Symbol newSymbolNameAggRst
+                            let evaluatedFunValue = evaluate2 (symbolValues_, sysVarValues_) fxExpr
+
+                            symbolValues_.TryAdd(newSymbolNameAggRst, evaluatedFunValue) |> ignore
+                            sl, Identifier newSymbolAggRst
+
                         | KeyWord ->
                             // 將非 DTExp 的 FunInvocation 替換為符號
                             let 不好用_最好維持原始_expression_list () =

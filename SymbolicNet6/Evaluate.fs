@@ -6,4 +6,6 @@ open MathNet.Numerics
 open MathNet.Numerics.LinearAlgebra
 open MathNet.Symbolics
 open Definition
+#if TENSOR_SUPPORT
 open DiffSharp
+#endif

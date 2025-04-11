@@ -1,12 +1,21 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFrameworks>net9.0;netstandard2.0</TargetFrameworks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <OutputType>Exe</OutputType>
+    <IfTensorSupport>false</IfTensorSupport>
+      <OutputPath>./bin</OutputPath>
   </PropertyGroup>
-
+<PropertyGroup Condition="'$(IfTensorSupport)'=='true'">
+  <DefineConstants>$(DefineConstants);TENSOR_SUPPORT</DefineConstants>
+</PropertyGroup>
   <ItemGroup>
+      <None Include="PostBuildEvent.ps1" />
+      <None Include="LICENSE.txt">
+        <PackagePath>\</PackagePath>
+        <Pack>True</Pack>
+      </None>
       <None Include="scripts\Strategy20250406.fsx" />
       <None Include="scripts\Global.fs" />
       <None Include="scripts\Strategy.fsx" />
@@ -42,25 +51,47 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="DiffSharp-cpu" Version="1.0.7" />
-    <PackageReference Include="DiffSharp.Backends.Reference" Version="1.0.7" />
-    <PackageReference Include="DiffSharp.Backends.Torch" Version="1.0.7" />
-    <PackageReference Include="DiffSharp.Core" Version="1.0.7" />
+    <PackageReference Include="DiffSharp-cpu" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true'" />
+    <PackageReference Include="DiffSharp.Backends.Reference" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true'" />
+    <PackageReference Include="DiffSharp.Backends.Torch" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true'" />
+    <PackageReference Include="DiffSharp.Core" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true'" />
     <PackageReference Include="FParsec" Version="1.1.1" />
     <PackageReference Include="MathNet.Numerics" Version="6.0.0-beta1" />
     <PackageReference Include="MathNet.Numerics.FSharp" Version="6.0.0-beta1" />
-    <PackageReference Include="PersistedConcurrentSortedList" Version="9.0.27.12" />
+    <PackageReference Include="PersistedConcurrentSortedList" Version="9.0.27.14" />
     <PackageReference Include="System.Runtime.Numerics" Version="4.3.0" />
       <PackageReference Include="protobuf-net" Version="3.2.45" />
       <PackageReference Include="protobuf-net.Core" Version="3.2.45" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\sharftrade9\Libs\Deedle\Deedle.fsproj" />
+    <!--<ProjectReference Include="..\..\sharftrade9\Libs\Deedle\Deedle.fsproj" />-->
+      <PackageReference Include="FAkka.Deedle" Version="8.8.8.9" />
+      
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Update="FSharp.Core" Version="9.0.201" />
   </ItemGroup>
 
+    <PropertyGroup Condition="'$(IfTensorSupport)'=='false'">
+        <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+        <Version>1.0.0.0</Version>
+        <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
+        <PackageId>FAkka.Mathnet.Symbolic</PackageId>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(IfTensorSupport)'=='true'">
+        <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+        <Version>1.0.0.0</Version>
+        <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
+        <PackageId>FAkka.Mathnet.Symbolic.withTensorSupported</PackageId>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    </PropertyGroup>
+    <Target Name="PostPackNugetDeployWindowsNoTensorSupport" AfterTargets="Pack" Condition="'$(Configuration)' == 'Release' AND '$(IfTensorSupport)'=='false'">
+        <Exec Command="powershell -c &quot;write-host '====== Start Post-Build Event ======'&quot;&#xD;&#xA;powershell .\PostBuildEvent.ps1 FAkka.Mathnet.Symbolic" />
+    </Target>
+    <Target Name="PostPackNugetDeployWindows" AfterTargets="Pack" Condition="'$(Configuration)' == 'Release' AND '$(IfTensorSupport)'=='true'">
+        <Exec Command="powershell -c &quot;write-host '====== Start Post-Build Event ======'&quot;&#xD;&#xA;powershell .\PostBuildEvent.ps1 FAkka.Mathnet.Symbolic.withTensorSupported" />
+    </Target>
 </Project>

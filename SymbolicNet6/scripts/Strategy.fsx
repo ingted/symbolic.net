@@ -226,3 +226,10 @@ f.Compile().Invoke(10, 11, 2)
 
 let aa = LeafExpressionConverter.QuotationToExpression (<@ fun () -> printfn "%d" 123 @>) :?> MethodCallExpression
 aa.ToString()
+
+
+
+let _ =
+    define "成交明細" ([],
+        SymbolicExpression.XParse "1") 
+SymbolicExpression(SymbolicExpression.XParse "2 + 成交明細()").Evaluate(dict [])

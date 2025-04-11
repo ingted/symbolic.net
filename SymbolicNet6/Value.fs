@@ -3,7 +3,9 @@
 open System
 open MathNet.Numerics
 open MathNet.Numerics.LinearAlgebra
+#if TENSOR_SUPPORT
 open DiffSharp
+#endif
 
 type BigInteger = System.Numerics.BigInteger
 
@@ -21,7 +23,9 @@ type Value =
     | RealMat of Matrix<float>
     | ComplexMat of Matrix<complex>
     | Empty
+#if TENSOR_SUPPORT
     | DSTen of Tensor
+#endif
     with 
         static member (+) (vl : Value, vr : Value) =
             match vl with
@@ -39,20 +43,32 @@ type Value =
                 match vr with
                 | Approximation (Real vrv) ->
                     Approximation (Real (vlv + vrv))
+#if TENSOR_SUPPORT
                 | DSTen dt ->
                     DSTen (vlv + dt)
+#endif
         static member (*) (vl : Value, vr : float) =
             match vl with
             | Approximation (Real vlv) ->
                 Approximation (Real (vlv * vr))
+            | RealVec lv ->
+                RealVec (lv * vr)
         static member (*) (vl : float, vr : Value) =
             match vr with
             | Approximation (Real vrv) ->
                 Approximation (Real (vl * vrv))
+            | RealVec rv ->
+                RealVec (rv * vl)
         static member (+) (vl : Value, vr : float) =
             match vl with
             | Approximation (Real vlv) ->
                 Approximation (Real (vlv + vr))
+            | RealVec vlv ->
+                RealVec (vlv + vr)
+#if TENSOR_SUPPORT
+            | DSTen dt ->
+                DSTen (vr + dt)
+#endif
         static member (+) (vl : float, vr : Value) =
             match vr with
             | Approximation vrv ->
@@ -61,8 +77,10 @@ type Value =
                     Approximation (Real (vl + vrvv))
             | RealVec rv ->
                 RealVec (rv + vl)
+#if TENSOR_SUPPORT
             | DSTen dt ->
                 DSTen (vl + dt)
+#endif
         static member (*) (a: Value, b: Value) =
             match a, b with
             | Value.Approximation (Complex c), Value.Approximation y -> Value.Approximation (Complex (c * (y.ComplexValue)))
