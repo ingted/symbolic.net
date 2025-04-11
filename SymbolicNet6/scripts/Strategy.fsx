@@ -1,4 +1,3 @@
-//#r @"..\src\Symbolics\bin\Debug\netstandard2.0\MathNet.Symbolics.dll"
 #I @"..\..\SymbolicNet6\bin\Debug\net9.0\"
 #r @"SymbolicNet6.dll"
 #r @"..\..\scripts\FsProfiler\FsProfiler.dll"
