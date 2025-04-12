@@ -1,12 +1,25 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFrameworks>net9.0;netstandard2.0</TargetFrameworks>
+    <PropertyGroup>
+        <IfTensorSupport>true</IfTensorSupport>
+    </PropertyGroup>
+  <PropertyGroup Condition="'$(IfTensorSupport)'=='true'">
+    
+    <TargetFrameworks>net9.0;netstandard2.1</TargetFrameworks>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <OutputType>Exe</OutputType>
-    <IfTensorSupport>false</IfTensorSupport>
+    
       <OutputPath>./bin</OutputPath>
   </PropertyGroup>
+
+    <PropertyGroup Condition="'$(IfTensorSupport)'=='false'">
+        <TargetFrameworks>net9.0;netstandard2.0</TargetFrameworks>
+        
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <OutputType>Exe</OutputType>
+        
+        <OutputPath>./bin</OutputPath>
+    </PropertyGroup>
 <PropertyGroup Condition="'$(IfTensorSupport)'=='true'">
   <DefineConstants>$(DefineConstants);TENSOR_SUPPORT</DefineConstants>
 </PropertyGroup>
@@ -51,9 +64,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="DiffSharp-cpu" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true'" />
+    <PackageReference Include="DiffSharp-cpu" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true' AND '$(TargetFramework)' == 'net9.0'" />
     <PackageReference Include="DiffSharp.Backends.Reference" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true'" />
-    <PackageReference Include="DiffSharp.Backends.Torch" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true'" />
+    <PackageReference Include="DiffSharp.Backends.Torch" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true' AND '$(TargetFramework)' == 'net9.0'" />
     <PackageReference Include="DiffSharp.Core" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true'" />
     <PackageReference Include="FParsec" Version="1.1.1" />
     <PackageReference Include="MathNet.Numerics" Version="6.0.0-beta1" />
