@@ -16,100 +16,13 @@ open Definition
 open DiffSharp
 #endif
 open System.Collections.Concurrent
-//open PersistedConcurrentSortedList
-//open Deedle
-
-
-//type TensorWrapper =
-//| DSTensor of Tensor
-//| VecInTensor of Vector<float>
-//| ListOf of TensorWrapper list
-
-//and [<NoComparison>] FloatingPoint =
-//    | Real of float
-//    | Complex of complex
-//    | RealVector of Vector<float>
-//    | ComplexVector of Vector<complex>
-//    | RealMatrix of Matrix<float>
-//    | ComplexMatrix of Matrix<complex>
-//    | Undef
-//    | PosInf
-//    | NegInf
-//    | ComplexInf
-//    | WTensor of TensorWrapper
-//    | Context of ConcurrentDictionary<VarName, FloatingPoint>
-//    | FC of fCell<string>
-//    | Frame of Frame<string, int64>
-//    | Series of ObjectSeries<int64>
-//    | NestedExpr of Expression list
-
-//    // Simpler usage in C#
-//    static member op_Implicit (x:float) = Real x
-//    static member op_Implicit (x:float32) = Real (float x)
-//    static member op_Implicit (x:complex) = Complex x
-//    static member op_Implicit (x:complex32) = Complex (Primitive.complex x)
-//    static member op_Implicit (x:Vector<float>) = RealVector x
-//    static member op_Implicit (x:Vector<complex>) = ComplexVector x
-//    static member op_Implicit (x:Matrix<float>) = RealMatrix x
-//    static member op_Implicit (x:Matrix<complex>) = ComplexMatrix x
-//    static member op_Implicit (x:Tensor) = WTensor <| DSTensor x
-//    static member op_Implicit (x:fCell<string>) = FC x
-//    static member op_Implicit (x:Frame<string, int64>) = Frame x
-//    static member op_Implicit (x:ObjectSeries<int64>) = Series x
-//    static member (*) ((a:FloatingPoint), (b: FloatingPoint)) =
-//        Real 0
-//    static member (*) ((a:float), (b: FloatingPoint)) =
-//        Real 0
-//    static member (*) ((a:FloatingPoint), (b: float)) =
-//        Real 0 
-//    member x.RealValue =
-//        match x with
-//        | Real x -> x
-//        | Complex x when x.IsReal() -> x.Real
-//        | _ -> failwith "Value not convertible to a real number."
-//    member x.ComplexValue =
-//        match x with
-//        | Real x -> complex x 0.0
-//        | Complex x -> x
-//        | _ -> failwith "Value not convertible to a complex number."
-//    member x.RealVectorValue =
-//        match x with
-//        | RealVector x -> x
-//        | _ -> failwith "Value not convertible to a real vector."
-//    member x.ComplexVectorValue =
-//        match x with
-//        | ComplexVector x -> x
-//        | _ -> failwith "Value not convertible to a complex vector."
-//    member x.RealMatrixValue =
-//        match x with
-//        | RealMatrix x -> x
-//        | _ -> failwith "Value not convertible to a real matrix."
-//    member x.ComplexMatrixValue =
-//        match x with
-//        | ComplexMatrix x -> x
-//        | _ -> failwith "Value not convertible to a complex matrix."
-//    member x.DTensorValue =
-//        match x with
-//        | WTensor (DSTensor x) -> x
-//        | _ -> failwith "Value not convertible to a DSTensor."
-//    member x.FrameValue =
-//        match x with
-//        | Frame x -> x
-//        | _ -> failwith "Value not convertible to a Frame."
-//    member x.FCValue =
-//        match x with
-//        | FC x -> x
-//        | _ -> failwith "Value not convertible to a fCell."
-//    member x.SeriesValue =
-//        match x with
-//        | Series x -> x
-//        | _ -> failwith "Value not convertible to a Series."
-
+open PersistedConcurrentSortedList
+open Deedle
 
 [<RequireQualifiedAccess>]
 module Linq =
     open Microsoft.FSharp.Linq.RuntimeHelpers
-    //open MathNet.Numerics.LinearAlgebra
+    open MathNet.Numerics.LinearAlgebra
     let ivk (e:Expression) =
         if e.Type.Name = "Func`2" then
             let aparam = Expression.Parameter(typeof<IDictionary<string, FloatingPoint>>)
@@ -1230,7 +1143,7 @@ module Evaluate =
             failwithf "orz 0005"
 
     [<CompiledName("Evaluate2")>]
-    let rec evaluate2 (symbolValues:ConcurrentDictionary<string, FloatingPoint>, sysVarValues:IDictionary<string, FloatingPoint> option) = function
+    let rec evaluate2 (symbolValues:ConcurrentDictionary<string, FloatingPoint>, sysVarValuesOpt:IDictionary<string, FloatingPoint> option) = function
         | Number n -> Real (float n) |> fnormalize
         | Undefined -> Undef
         | ComplexInfinity -> ComplexInf
@@ -1245,38 +1158,40 @@ module Evaluate =
             match symbolValues.TryGetValue s with
             | true, a -> a |> fnormalize
             | _ ->
-                match sysVarValues.Value.TryGetValue s with
-                | true, a -> a |> fnormalize
-                | _ ->
+                if sysVarValuesOpt.IsNone then
                     failwithf  "Failed to find symbol %s" s
+                else
+                    match sysVarValuesOpt.Value.TryGetValue s with
+                    | true, a -> a |> fnormalize
+                    | _ ->
+                        failwithf  "Failed to find symbol %s" s
         | Argument (Symbol s) -> failwithf  "Cannot evaluate a argument %s" s
-        | Sum xs -> xs |> List.map (evaluate2 (symbolValues, sysVarValues)) |> List.reduce fadd |> fnormalize
+        | Sum xs -> xs |> List.map (evaluate2 (symbolValues, sysVarValuesOpt)) |> List.reduce fadd |> fnormalize
         | Product xs ->
-            let evall = xs |> List.map (evaluate2 (symbolValues, sysVarValues))
+            let evall = xs |> List.map (evaluate2 (symbolValues, sysVarValuesOpt))
             let reducel = evall |> List.reduce fmultiply
             reducel |> fnormalize
-        | Power (r, p) -> fpower (evaluate2 (symbolValues, sysVarValues) r) (evaluate2 (symbolValues, sysVarValues) p) |> fnormalize
-        | Function (f, x) -> fapply f (evaluate2 (symbolValues, sysVarValues) x) |> fnormalize
-        | FunctionN (f, xs) -> xs |> List.map (evaluate2 (symbolValues, sysVarValues)) |> fapplyN f |> fnormalize
-        | FunInvocation (Symbol fnm, paramValueExprList) ->
-            //
+        | Power (r, p) -> fpower (evaluate2 (symbolValues, sysVarValuesOpt) r) (evaluate2 (symbolValues, sysVarValuesOpt) p) |> fnormalize
+        | Function (f, x) -> fapply f (evaluate2 (symbolValues, sysVarValuesOpt) x) |> fnormalize
+        | FunctionN (f, xs) -> xs |> List.map (evaluate2 (symbolValues, sysVarValuesOpt)) |> fapplyN f |> fnormalize
+        | FunInvocation (Symbol parentFxName, paramValueExprList) ->
             let cal_param_fd_val () =
                 paramValueExprList
                 |> List.map (fun paramValueExpr ->
-                    evaluate2 (symbolValues, sysVarValues) paramValueExpr
+                    evaluate2 (symbolValues, sysVarValuesOpt) paramValueExpr
                 )
 
             let cal_param_obj_val () =
                 paramValueExprList
                 |> List.map (fun paramValueExpr ->
-                    evaluate2 (symbolValues, sysVarValues) paramValueExpr |> box
+                    evaluate2 (symbolValues, sysVarValuesOpt) paramValueExpr |> box
                 )
                 |> Array.ofList
 
             let cal_param_real_val () =
                 paramValueExprList
                 |> List.map (fun paramValueExpr ->
-                    match evaluate2 (symbolValues, sysVarValues) paramValueExpr with
+                    match evaluate2 (symbolValues, sysVarValuesOpt) paramValueExpr with
                     | (FloatingPoint.Real v) -> v
                     | (FloatingPoint.Int v) -> float v
                     | (FloatingPoint.Decimal v) -> float v
@@ -1286,33 +1201,33 @@ module Evaluate =
             let cal_param_vec_val () =
                 paramValueExprList
                 |> List.map (fun paramValueExpr ->
-                    match evaluate2 (symbolValues, sysVarValues) paramValueExpr with
+                    match evaluate2 (symbolValues, sysVarValuesOpt) paramValueExpr with
                     | (RealVector v) -> v
-                    | _ -> failwithf "vector parameter is required for %s" fnm
+                    | _ -> failwithf "vector parameter is required for %s" parentFxName
                 )
                 |> Array.ofList
             let cal_param_mat_vec_val () =
                 paramValueExprList
                 |> List.map (fun paramValueExpr ->
-                    match evaluate2 (symbolValues, sysVarValues) paramValueExpr with
+                    match evaluate2 (symbolValues, sysVarValuesOpt) paramValueExpr with
                     | (FloatingPoint.RealVector v) -> FloatingPoint.RealVector v
                     | (FloatingPoint.RealMatrix v) -> FloatingPoint.RealMatrix v
-                    | _ -> failwithf "vector parameter is required for %s" fnm
+                    | _ -> failwithf "vector parameter is required for %s" parentFxName
                 )
                 |> Array.ofList
 
             let cal_param_list_of_vec_val () : TensorWrapper list =
                 paramValueExprList
                 |> List.map (fun paramValueExpr ->
-                    let evalrst = evaluate2 (symbolValues, sysVarValues) paramValueExpr
+                    let evalrst = evaluate2 (symbolValues, sysVarValuesOpt) paramValueExpr
                     match evalrst with
                     | (FloatingPoint.RealVector v) ->
                         VecInTensor v //計算結果WTensor                    
                     | (FloatingPoint.WTensor tw) ->  tw
-                    | _ -> failwithf "vector or WTensor parameter is required for %s" fnm
+                    | _ -> failwithf "vector or WTensor parameter is required for %s" parentFxName
                 )
 
-            if keyWord.ContainsKey fnm then
+            if keyWord.ContainsKey parentFxName then
                 let mbr () =
                     let param_val = cal_param_vec_val ()
                     let m2 = DenseMatrix.zero<float> (param_val.Length) (param_val.[0].Count)
@@ -1321,7 +1236,7 @@ module Evaluate =
                         m2.SetRow(i, v)
                     )
                     m2
-                match fnm with
+                match parentFxName with
                 | "lo"
                 | "list_of" -> //無法知道自己是否是最上層，所以不能回傳 tensor
                     //htensor(list_of(list_of(list_of(vec(), vec()), list_of(vec(), vec()))))
@@ -1451,12 +1366,65 @@ module Evaluate =
                 | _ ->
                     failwithf "omg fnm!!!"
             else
+                //let rec analysisFx (sl:Symbol list) (fxExpr:MathNet.Symbolics.Expression) =
+                //    (*
+                //        let _ =
+                //            cur3fto1v "ma_base" ((
+                //                fun cur cmid scale pos -> //vector [1.0;2;3]
+                //                    printfn "cur => %A" cur //cur = 0 是用來表示"當根"
+                //                    if scale = 30.0 || cmid <> 0 then //ES連續月目前以 0 表示
+                //                        vector [1.5; 2.5; 3.5]
+                //                    else
+                //                        failwithf "scale not supported"
+    
+                //                ), Symbol "cur")
+
+                //        let _ =
+                //            define "ma" ([Symbol "cmid"; Symbol "scale"; Symbol "pos"],
+                //                SymbolicExpression.XParse "ma_base(cmid, scale, pos)")
+
+                //    *) //evaluate2 (symbolValues, sysVarValues) frv
+                //    match fxExpr with
+                //    | FunInvocation ((Symbol sb), origParamExp) when funDict.ContainsKey sb -> //例如 funDict 包含 ma_base
+                //        match funDict.[sb] with
+                //        | DTExp (param2, fx2) -> analysisFx param2 fx2 //ma 的 定義 就是 FunInvocation (Symbol "ma_base", _)
+                //        | KeyWord ->
+                //            let substitute = ((Symbol sb), paramValueExprList) 
+                //            Choice2Of2 <| FunInvocation substitute
+                //        | _ ->
+                //            failwith "Nested FunInvocation haven't yet implemented"
+                //    | FunInvocation ((Symbol sb), _) ->
+                //        let substitute = ((Symbol sb), paramValueExprList) 
+                //        Choice2Of2 <| FunInvocation substitute
+                //    | _ -> Choice1Of2 fxExpr //Choice1Of2 不是funInvoke
+
+
+                //let rec nestedFxHandler (sl:Symbol list) (fxExpr:MathNet.Symbolics.Expression) =
+                //    match fxExpr with
+                //    | FunInvocation ((Symbol sb), origParamExp) when funDict.ContainsKey sb -> //例如 funDict 包含 ma_base
+                //        match funDict.[sb] with
+                //        | DTExp (param2, fx2) -> nestedFxHandler param2 fx2 //ma 的 定義 就是 FunInvocation (Symbol "ma_base", _)
+                //        | KeyWord ->
+                //            let substitute = ((Symbol sb), paramValueExprList) 
+                //            Choice2Of2 <| ([], FunInvocation substitute)
+                //        | _ ->
+                //            failwith "Nested FunInvocation haven't yet implemented"
+                //    | FunInvocation ((Symbol sb), _) ->
+                //        let substitute = ((Symbol sb), paramValueExprList) 
+                //        Choice2Of2 <| ([], FunInvocation substitute)
+                //    | _ ->
+                //        let extraParams =
+                //            ExpressionHelpFun.collectIdentifiers fxExpr
+                //            |> fun cb ->
+                //                List.except sl (cb |> Seq.toList)
+                //        Choice1Of2 (extraParams, fxExpr)
 
                 let rec nestedFxHandler
-                    (sl: Symbol list)
+                    (sl: Symbol list) //fxExpr 中 sl 的變數需要
                     (fxExpr: MathNet.Symbolics.Expression)
+                    //(paramValueExprList_:MathNet.Symbolics.Expression list option)
                     (symbolValues_: ConcurrentDictionary<string, FloatingPoint>)
-                    (sysVarValues_: IDictionary<string, FloatingPoint> option)
+                    (sysVarValues_: IDictionary<string, FloatingPoint> option) //代換為這裡的值
                     : (Symbol list) * (MathNet.Symbolics.Expression) =
 
                     let exprMap sl_ (exprs:MathNet.Symbolics.Expression list) =
@@ -1490,51 +1458,23 @@ module Evaluate =
 
                     match fxExpr with
                     | FunInvocation ((Symbol sb), origParamExp) when Definition.funDict.ContainsKey sb ->
-                        let def = Definition.funDict[sb]
-                        match def with
-                        | DTExp (param2, fx2) ->
-                            nestedFxHandler param2 fx2 symbolValues_ sysVarValues_
-                        | DTFunI1toI1 _
-                        //    let param_val = cal_param_real_val ()
-                        //    f (int param_val.[0]) |> float |> Real
-                        | DTFunF2toV1 _
-                        //    let param_val = cal_param_real_val ()
-                        //    f param_val.[0] param_val.[1] |> RealVector
-                        | DTCurF2toV1 _
-                        //    let param_val = cal_param_real_val ()
-                        //    let cur = symbolValues.[sym].DecimalValue
-                        //    f cur param_val.[0] param_val.[1] |> RealVector
-                        //    f ()
-                        //    Undef
-                        | DTCurF3toV1 _ 
-                        | DTFunAction _ ->
-                            let newSymbolNameAggRst = $"__{sb}_{Guid.NewGuid().ToString()}__"
-                            let newSymbolAggRst = Symbol newSymbolNameAggRst
-                            let evaluatedFunValue = evaluate2 (symbolValues_, sysVarValues_) fxExpr
+                        let evaluatedValue =
+                            origParamExp
+                            |> List.map (fun param ->
+                                let newSymbolName = $"__{sb}_{Guid.NewGuid().ToString()}__"
+                                let newSymbol = Symbol newSymbolName
+                                let paramValue = evaluate2 (symbolValues_, sysVarValues_) param
+                                symbolValues_.TryAdd(newSymbolName, paramValue) |> ignore
+                                Identifier newSymbol
+                            )
+                        
+                        //sl, FunInvocation ((Symbol sb), evaluatedValue)
 
-                            symbolValues_.TryAdd(newSymbolNameAggRst, evaluatedFunValue) |> ignore
-                            sl, Identifier newSymbolAggRst
-
-                        | KeyWord ->
-
-
-                            let evaluatedValue =
-                                origParamExp
-                                |> List.map (fun param ->
-                                    let newSymbolName = $"__{sb}_{Guid.NewGuid().ToString()}__"
-                                    let newSymbol = Symbol newSymbolName
-                                    let paramValue = evaluate2 (symbolValues_, sysVarValues_) param
-                                    symbolValues_.TryAdd(newSymbolName, paramValue) |> ignore
-                                    Identifier newSymbol
-                                )
-                            
-                            //sl, FunInvocation ((Symbol sb), evaluatedValue)
-
-                            let newSymbolNameAggRst = $"__{sb}_{Guid.NewGuid().ToString()}__"
-                            let newSymbolAggRst = Symbol newSymbolNameAggRst
-                            let evaluatedFunValue = evaluate2 (symbolValues_, sysVarValues_) (FunInvocation ((Symbol sb), evaluatedValue))
-                            symbolValues_.TryAdd(newSymbolNameAggRst, evaluatedFunValue) |> ignore
-                            sl, Identifier newSymbolAggRst
+                        let newSymbolNameAggRst = $"__{sb}_{Guid.NewGuid().ToString()}__"
+                        let newSymbolAggRst = Symbol newSymbolNameAggRst
+                        let evaluatedFunValue = evaluate2 (symbolValues_, sysVarValues_) (FunInvocation ((Symbol sb), evaluatedValue))
+                        symbolValues_.TryAdd(newSymbolNameAggRst, evaluatedFunValue) |> ignore
+                        sl, Identifier newSymbolAggRst
 
                     | FunInvocation _ ->
                         failwith "Undefined func"
@@ -1548,138 +1488,32 @@ module Evaluate =
                         |> fun u ->
                             u, traversed
 
-                //let rec nestedFxHandler
-                //    (sl: Symbol list)
-                //    (fxExpr: MathNet.Symbolics.Expression)
-                //    (symbolValues_: ConcurrentDictionary<string, FloatingPoint>)
-                //    (sysVarValues_: IDictionary<string, FloatingPoint> option)
-                //    : (Symbol list) * (MathNet.Symbolics.Expression) =
 
-                //    let exprMap sl_ (exprs:MathNet.Symbolics.Expression list) =
-                //        exprs
-                //        |> List.fold (fun (symL, uExprs) expr ->
-                //            let usl, uExpr = nestedFxHandler symL expr symbolValues_ sysVarValues_
-                //            usl, uExprs @ [uExpr]
-                //        ) (sl_, [])
+                match funDict.[parentFxName] with
+                //       x1, y1    dup0(paramValueExprList)
+                | DTExp (parentFxParamSymbols, parentFxBody) ->
+                    if parentFxParamSymbols.Length <> paramValueExprList.Length then
+                        failwithf "%s parameter length not matched %A <-> %A" parentFxName parentFxParamSymbols paramValueExprList
 
-                //    let traverse sl_ expr =
-                //        match expr with
-                //        | Sum terms ->
-                //            let updatedSL, uExprs = exprMap sl_ terms
-                //            updatedSL, Sum uExprs
-                //        | Product terms ->
-                //            let updatedSL, uExprs = exprMap sl_ terms
-                //            updatedSL, Product uExprs
-                //        | Power (baseExpr, expExpr) ->
-                //            let updatedSL, uExpr = nestedFxHandler sl_ baseExpr symbolValues_ sysVarValues_
-                //            let updatedSL2, uExpExpr = nestedFxHandler updatedSL expExpr symbolValues_ sysVarValues_
-                //            updatedSL2, Power (uExpr, uExpExpr)
-                //        | Function (func, arg) ->
-                //            let updatedSL, uExpr = nestedFxHandler sl_ arg symbolValues_ sysVarValues_
-                //            updatedSL, Function (func, uExpr)
-                //        | FunctionN (func, args) ->
-                //            let updatedSL, uExprs = exprMap sl_ args
-                //            updatedSL, FunctionN (func, uExprs)
-                //        | _ ->
-                //            sl_, expr
-
-                //    match fxExpr with
-                //    | FunInvocation ((Symbol sb), origParamExp) when Definition.funDict.ContainsKey sb ->
-                //        let def = Definition.funDict[sb]
-                //        match def with
-                //        | DTExp (param2, fx2) ->
-                //            // 為每個參數創建唯一符號並計算值
-                //            let paramValues = 
-                //                origParamExp 
-                //                |> List.map (fun param -> evaluate2 (symbolValues_, sysVarValues_) param)
-            
-                //            let newSymbols = 
-                //                param2 
-                //                |> List.mapi (fun i sym -> 
-                //                    let newName = $"__{sb}_param_{i}_{Guid.NewGuid().ToString()}__"
-                //                    newName, sym)
-                
-                //            // 將參數值添加到符號表
-                //            newSymbols 
-                //            |> List.iteri (fun i (newName, _) -> 
-                //                symbolValues_.TryAdd(newName, paramValues.[i]) |> ignore)
-            
-                //            // 替換函數體中的參數符號
-                //            let updatedFx2 = 
-                //                param2 
-                //                |> List.mapi (fun i sym -> 
-                //                    Identifier (Symbol $"__{sb}_param_{i}_{Guid.NewGuid().ToString()}__"))
-                //                |> List.fold (fun (expr:Expression) (newSym, oldSym) -> 
-                //                    Expression.substitute oldSym newSym expr) fx2
-                
-                //            nestedFxHandler sl updatedFx2 symbolValues_ sysVarValues_
-            
-                //        | DTFunI1toI1 _
-                //        | DTFunF2toV1 _
-                //        | DTCurF2toV1 _
-                //        | DTCurF3toV1 _ 
-                //        | DTFunAction _ ->
-                //            let newSymbolName = $"__{sb}_{Guid.NewGuid().ToString("N")}__"
-                //            let newSymbol = Symbol newSymbolName
-                //            let evaluatedValue = evaluate2 (symbolValues_, sysVarValues_) fxExpr
-                //            symbolValues_.TryAdd(newSymbolName, evaluatedValue) |> ignore
-                //            sl, Identifier newSymbol
-            
-                //        | KeyWord ->
-                //            let evaluatedValue =
-                //                origParamExp
-                //                |> List.map (fun param ->
-                //                    let newSymbolName = $"__{sb}_param_{Guid.NewGuid().ToString("N")}__"
-                //                    let newSymbol = Symbol newSymbolName
-                //                    let paramValue = evaluate2 (symbolValues_, sysVarValues_) param
-                //                    symbolValues_.TryAdd(newSymbolName, paramValue) |> ignore
-                //                    Identifier newSymbol
-                //                )
-            
-                //            let newSymbolName = $"__{sb}_result_{Guid.NewGuid().ToString("N")}__"
-                //            let newSymbol = Symbol newSymbolName
-                //            let evaluatedFunValue = evaluate2 (symbolValues_, sysVarValues_) (FunInvocation ((Symbol sb), evaluatedValue))
-                //            symbolValues_.TryAdd(newSymbolName, evaluatedFunValue) |> ignore
-                //            sl, Identifier newSymbol
-
-                //    | FunInvocation _ ->
-                //        failwith "Undefined func"
-        
-                //    | _ ->
-                //        let updatedSL, traversed = traverse sl fxExpr
-                //        let allSymbols = ExpressionHelpFun.collectIdentifiers traversed |> Seq.toList
-                //        allSymbols
-                //        |> List.except updatedSL
-                //        |> List.append updatedSL
-                //        |> fun u -> u, traversed
-
-
-                match funDict.[fnm] with
-                | DTExp (param, fx) ->
-                    //這邊必須將 fx 中用 FunInvocation 的參數位置的值算出再呼叫
-                    //但是照理來說 Mathnet.Symbolic 應該會把在 compileExpressionOrThrow2 時把表達式都換成可計算的 Lambda
-                    //所以這邊的目標就是把所有的 FunInvocation 都代換掉變成 Identifier
-                    if param.Length <> paramValueExprList.Length then
-                        failwithf "%s parameter length not matched %A <-> %A" fnm param paramValueExprList
                     let passIn =
-                        param
-                        |> Seq.mapi (fun i sb -> sb.SymbolName, evaluate2 (symbolValues, sysVarValues) paramValueExprList[i])
+                        parentFxParamSymbols
+                        |> Seq.mapi (fun i sb ->
+                            sb.SymbolName, evaluate2 (symbolValues, sysVarValuesOpt) paramValueExprList[i]
+                        )
 
-                    let updatedSysVarVales = Some (dict passIn)
-                    let uSL, frv = nestedFxHandler param fx symbolValues updatedSysVarVales
-
-                    match frv with
-                    | Identifier newSymbol ->
-                        symbolValues[newSymbol.SymbolName]
+                    match parentFxBody with
+                    | Identifier aSymbol ->
+                        symbolValues[aSymbol.SymbolName]
                     | FunInvocation _ ->
-                        evaluate2 (symbolValues, updatedSysVarVales) frv
+                        evaluate2 (symbolValues, (Some (dict passIn))) parentFxBody
                     | _ ->
+                        let uSL, frv = nestedFxHandler parentFxParamSymbols parentFxBody symbolValues (Some (dict passIn))
                         let expr, cmpl = Compile.compileExpressionOrThrow2 frv uSL
                         let param_val = cal_param_obj_val ()
-                        cal
+                        
                         let rst =
                             cmpl.DynamicInvoke(
-                                Array.append param_val (uSL |> List.skip param.Length |> List.map (fun s -> box symbolValues[s.SymbolName]) |> List.toArray)
+                                Array.append param_val (uSL |> List.skip parentFxParamSymbols.Length |> List.map (fun s -> box symbolValues[s.SymbolName]) |> List.toArray)
                             )
                         obj2FloatPoint rst
 
