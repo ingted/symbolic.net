@@ -20,6 +20,7 @@ type Expression =
     | Constant of Constant
     | Sum of Expression list
     | Product of Expression list
+    | PointwiseMul of Expression * Expression
     | Power of Expression * Expression
     | Function of Function * Expression
     | FunctionN of FunctionN * (Expression list)
@@ -133,6 +134,13 @@ and [<NoComparison>] FloatingPoint =
         | Series x -> x
         | _ -> failwith "Value not convertible to a Series."
 
+    static member (.*) (a: FloatingPoint, b: FloatingPoint) : FloatingPoint =
+        match a, b with
+        | RealVector va, RealVector vb when va.Count = vb.Count ->
+            RealVector (va.PointwiseMultiply vb)
+        | _ ->
+            failwithf "FloatingPoint .*. not supported for:\na = %A\nb = %A" a b
+
 module ExpressionHelpFun =
     open System.Collections.Concurrent
     let collectIdentifiers (expr: Expression) : ConcurrentBag<Symbol> =
@@ -185,6 +193,7 @@ module Values =
 
     let sum (a, b) = Value.sum (a, b) |> unpack
     let product (a, b) = Value.product (a, b) |> unpack
+    //let pointwiseMultiply (a, b) = Value.product (a, b) |> unpack
     let invert a = Value.invert a |> unpack
     let power (a, b) = Value.power (a, b) |> unpack
 
@@ -540,6 +549,13 @@ module Operators =
     let sum (xs:Expression list) : Expression = if List.isEmpty xs then zero else List.reduce add xs
     let sumSeq (xs:Expression seq) : Expression = Seq.fold add zero xs
     let product (xs:Expression list) : Expression = if List.isEmpty xs then one else List.reduce multiply xs
+    let pointwiseMultiply  (x:Expression) (y:Expression) : Expression =
+        match x, y with
+        | Number n1, Number n2 -> Number (n1 * n2) // trivial scalar multiply
+        | Approximation _, Approximation _ -> Product [x;y]
+        | _ -> PointwiseMul(x, y)
+
+
     let productSeq (xs:Expression seq) : Expression = Seq.fold multiply one xs
 
     let root (n:Expression) (x:Expression) : Expression = pow x (pow n minusOne)

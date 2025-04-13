@@ -12,7 +12,9 @@ module Rational =
     let rec numerator = function
         | Number n when not n.IsInteger -> fromInteger n.Numerator
         | NegRationalPower _ -> one
-        | Product ax -> product <| List.map numerator ax
+        | Product ax ->
+            let v = product <| List.map numerator ax
+            v
         | z -> z
 
     [<CompiledName("Denominator")>]

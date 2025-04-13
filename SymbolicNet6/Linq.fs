@@ -19,6 +19,7 @@ open System.Collections.Concurrent
 open PersistedConcurrentSortedList
 open Deedle
 
+
 [<RequireQualifiedAccess>]
 module Linq =
     open Microsoft.FSharp.Linq.RuntimeHelpers
@@ -40,6 +41,15 @@ module Linq =
             |> LeafExpressionConverter.QuotationToExpression 
             |> unbox<Expression<'a>>
 
+
+    type MyOps =
+        static member PointwiseMultiply(a: float[], b: float[]) =
+            Array.map2 (*) a b
+        static member PointwiseMultiply(a: int[], b: int[]) =
+            Array.map2 (*) a b
+        static member PointwiseMultiply(a: decimal[], b: decimal[]) =
+            Array.map2 (*) a b
+
     [<CompiledName("Parse")>]
     let rec parse (q: System.Linq.Expressions.Expression) : MathNet.Symbolics.Expression =
         match q.NodeType, q with
@@ -55,7 +65,12 @@ module Linq =
         | ExpressionType.Lambda, (:? LambdaExpression as e) -> parse e.Body
         | ExpressionType.Try, (:? TryExpression as e) -> parse e.Body
         | ExpressionType.Convert, (:? UnaryExpression as e) -> parse e.Operand
-        | _ -> failwith $"NodeType {q.NodeType} not supported"
+        | ExpressionType.Call, (:? MethodCallExpression as e) when
+            e.Method.Name = "PointwiseMultiply" &&
+            e.Method.DeclaringType = typeof<MyOps> ->
+                pointwiseMultiply (parse e.Arguments[0]) (parse e.Arguments[1])
+        | _ ->
+            failwith $"NodeType {q.NodeType} not supported"
 
     let rec private numerator = function
         | NegPower _ -> one
@@ -274,7 +289,37 @@ module Linq =
                 Expression.Lambda(visitedBody, pp) :> Expression
             }
 
+    //let pointwiseMulExpr (a: Expression) (b: Expression) : Expression =
+    //    // 呼叫你預先註冊的靜態方法（如 MyOps.PointwiseMultiply）
+    //    Expression.Call(typeof<MyOps>.GetMethod("PointwiseMultiply", [| typeof<Vector<float>>; typeof<Vector<float>> |]), a, b)
 
+    let sharedPointwiseMul (a: Expression) (b: Expression) : Expression =
+        let callPointwise x y =
+            Expression.Call(typeof<MyOps>.GetMethod("PointwiseMultiply", [| typeof<Vector<float>>; typeof<Vector<float>> |]), x, y) :> Expression
+
+        match a.NodeType, b.NodeType with
+        | ExpressionType.Lambda, ExpressionType.Lambda ->
+            let al = a :?> LambdaExpression
+            let bl = b :?> LambdaExpression
+            let allParams =
+                Seq.append al.Parameters bl.Parameters
+                |> Seq.distinct
+            let body =
+                callPointwise al.Body bl.Body
+            Expression.Lambda(body, allParams) :> Expression
+
+        | ExpressionType.Lambda, _ ->
+            let al = a :?> LambdaExpression
+            let body = callPointwise al.Body b
+            Expression.Lambda(body, al.Parameters) :> Expression
+
+        | _, ExpressionType.Lambda ->
+            let bl = b :?> LambdaExpression
+            let body = callPointwise a bl.Body
+            Expression.Lambda(body, bl.Parameters) :> Expression
+
+        | _, _ ->
+            callPointwise a b
 
     let rec toLambda (expr : MathNet.Symbolics.Expression) (args : Symbol list) (valueType : Type) (mathType : Type) (funcInvokTyp : Type option) constant value add mul div pow atan2 log abs besselj bessely besseli besselk besseliratio besselkratio hankelh1 hankelh2 : LambdaExpression option =
         let valueTypeArr1 = [| valueType |]
@@ -487,7 +532,10 @@ module Linq =
                     let nExp = compileFraction n
                     let dExp = compileFraction d
                     Option.map2 div nExp dExp
-
+            | PointwiseMul (x, y) ->
+                let a = convertExpr x
+                let b = convertExpr y
+                Option.map2 sharedPointwiseMul a b
             | Undefined -> None
         and compileFraction = function
             | Product(xs) ->
@@ -567,48 +615,67 @@ module Linq =
             | (at, bt) when bt <> ExpressionType.Lambda && at <> ExpressionType.Lambda ->
                 Expression.Multiply(a, b) :> Expression
 
-    and [<CompiledName("FormatValueLambda")>] formatValueLambda (expr : MathNet.Symbolics.Expression) (args : Symbol list) : LambdaExpression option =
-        let value = function
+    and value_VT = function
             | Value.Approximation a -> Some (Expression.Constant a.RealValue :> Expression)
             | Value.NegativeInfinity -> Some (Expression.Constant System.Double.NegativeInfinity :> Expression)
             | Value.PositiveInfinity -> Some (Expression.Constant System.Double.PositiveInfinity :> Expression)
             | Value.Number n -> Some (Expression.Constant (float n) :> Expression)
             | Value.RealVec v ->
                 Some (Expression.Constant v :> Expression)
+            | Value.ComplexVec v ->
+                Some (Expression.Constant v :> Expression)
+            | Value.RealMat v ->
+                Some (Expression.Constant v :> Expression)
+            | Value.ComplexMat v ->
+                Some (Expression.Constant v :> Expression)
             | _ ->
                 None
-        let constant = function
+    and constant_VT = function
             | E -> Some (Expression.Constant Constants.E :> Expression)
             | Pi -> Some (Expression.Constant Constants.Pi :> Expression)
             | _ -> None
-        let valueType = typeof<float>
-        let mathType = typeof<System.Math>
-        let add a b = Expression.Add(a, b) :> Expression
+    and valueTypeFloat = typeof<float>
+    and mathType = typeof<System.Math>
+    and add_VT a b = Expression.Add(a, b) :> Expression
+    and div_VT a b = Expression.Divide(a, b) :> Expression
+    and mathCall1 (name : string) (a : Expression) = Expression.Call(mathType.GetMethod(name, [| valueTypeFloat |]), a) :> Expression
+    and mathCall2 (name : string) (a : Expression) (b : Expression) = Expression.Call(mathType.GetMethod(name, [| valueTypeFloat; valueTypeFloat |]), a, b) :> Expression
+    and pow_VT = mathCall2 "Pow"
+    and atan2_VT = mathCall2 "Atan2"
+    and log_VT a b = mathCall2 "Log" b a
+    and abs_VT = mathCall1 "Abs"
+    and [<CompiledName("FormatValueLambda")>] formatValueLambda (expr : MathNet.Symbolics.Expression) (args : Symbol list) : LambdaExpression option =
         let mul = sharedMul
-        let div a b = Expression.Divide(a, b) :> Expression
-        let mathCall1 (name : string) (a : Expression) = Expression.Call(mathType.GetMethod(name, [| valueType |]), a) :> Expression
-        let mathCall2 (name : string) (a : Expression) (b : Expression) = Expression.Call(mathType.GetMethod(name, [| valueType; valueType |]), a, b) :> Expression
-        let pow = mathCall2 "Pow"
-        let atan2 = mathCall2 "Atan2"
-        let log a b = mathCall2 "Log" b a
-        let abs = mathCall1 "Abs"
-        formatLambdaBase expr args valueType mathType (Some typeof<Value>) mathCall2 constant value add mul div pow atan2 log abs
+        formatLambdaBase expr args valueTypeFloat mathType (Some typeof<Value>) mathCall2 constant_VT value_VT add_VT mul div_VT pow_VT atan2_VT log_VT abs_VT
     
+    //and value_T = function
+    //        | Value.Approximation a -> Some (Expression.Constant a.RealValue :> Expression)
+    //        | Value.NegativeInfinity -> Some (Expression.Constant System.Double.NegativeInfinity :> Expression)
+    //        | Value.PositiveInfinity -> Some (Expression.Constant System.Double.PositiveInfinity :> Expression)
+    //        | Value.Number n -> Some (Expression.Constant (float n) :> Expression)
+    //        //20250413 加入了這幾個，如果有問題要拿掉
+    //        | Value.RealVec v ->
+    //            Some (Expression.Constant v :> Expression)
+    //        | Value.ComplexVec v ->
+    //            Some (Expression.Constant v :> Expression)
+    //        | Value.RealMat v ->
+    //            Some (Expression.Constant v :> Expression)
+    //        | Value.ComplexMat v ->
+    //            Some (Expression.Constant v :> Expression)
+    //        | _ -> None
+    //and constant_T = function
+    //        | E -> Some (Expression.Constant Constants.E :> Expression)
+    //        | Pi -> Some (Expression.Constant Constants.Pi :> Expression)
+    //        | _ -> None
+    
+    //and add_T a b = Expression.Add(a, b) :> Expression
+
+    //and div_T a b = Expression.Divide(a, b) :> Expression
+    //and pow_T = mathCall2 "Pow"
+    //and atan2_T = mathCall2 "Atan2"
+    //and log_T a b = mathCall2 "Log" b a
+    //and abs_T = mathCall1 "Abs"
     and [<CompiledName("FormatLambda")>] formatLambda (expr : MathNet.Symbolics.Expression) (args : Symbol list) : LambdaExpression option =
-        let value = function
-            | Value.Approximation a -> Some (Expression.Constant a.RealValue :> Expression)
-            | Value.NegativeInfinity -> Some (Expression.Constant System.Double.NegativeInfinity :> Expression)
-            | Value.PositiveInfinity -> Some (Expression.Constant System.Double.PositiveInfinity :> Expression)
-            | Value.Number n -> Some (Expression.Constant (float n) :> Expression)
-            | _ -> None
-        let constant = function
-            | E -> Some (Expression.Constant Constants.E :> Expression)
-            | Pi -> Some (Expression.Constant Constants.Pi :> Expression)
-            | _ -> None
-        let valueType = typeof<float>
-        let mathType = typeof<System.Math>
-        let add a b = Expression.Add(a, b) :> Expression
-        let mul = sharedMul
         //let mul (a:Expression) (b:Expression) = //Expression.Multiply(a, b) :> Expression
         //    match a.NodeType, b.NodeType with
         //    | (ExpressionType.Lambda, ExpressionType.Lambda) ->
@@ -644,27 +711,20 @@ module Linq =
         //             :> Expression
         //    | (at, bt) when bt <> ExpressionType.Lambda && at <> ExpressionType.Lambda ->
         //        Expression.Multiply(a, b) :> Expression
+        let mul_T = sharedMul
+        formatLambdaBase expr args valueTypeFloat mathType None mathCall2 constant_VT value_VT add_VT mul_T div_VT pow_VT atan2_VT log_VT abs_VT
 
-        let div a b = Expression.Divide(a, b) :> Expression
-        let mathCall1 (name : string) (a : Expression) = Expression.Call(mathType.GetMethod(name, [| valueType |]), a) :> Expression
-        let mathCall2 (name : string) (a : Expression) (b : Expression) = Expression.Call(mathType.GetMethod(name, [| valueType; valueType |]), a, b) :> Expression
-        let pow = mathCall2 "Pow"
-        let atan2 = mathCall2 "Atan2"
-        let log a b = mathCall2 "Log" b a
-        let abs = mathCall1 "Abs"
-        formatLambdaBase expr args valueType mathType None mathCall2 constant value add mul div pow atan2 log abs
-
+    and besselj = mathCall2 "BesselJ"
+    and bessely = mathCall2 "BesselY"
+    and besseli = mathCall2 "BesselI"
+    and besselk = mathCall2 "BesselK"
+    and besseliratio = mathCall2 "BesselIRatio"
+    and besselkratio = mathCall2 "BesselKRatio"
+    and hankelh1 = mathCall2 "HankelH1"
+    and hankelh2 = mathCall2 "HankelH2"
     and [<CompiledName("FormatLambdaBase")>] formatLambdaBase (expr : MathNet.Symbolics.Expression) (args : Symbol list)
             valueType mathType (funcInvokTyp : Type option) mathCall2 constant value add mul div pow atan2 log abs
             : LambdaExpression option =        
-        let besselj = mathCall2 "BesselJ"
-        let bessely = mathCall2 "BesselY"
-        let besseli = mathCall2 "BesselI"
-        let besselk = mathCall2 "BesselK"
-        let besseliratio = mathCall2 "BesselIRatio"
-        let besselkratio = mathCall2 "BesselKRatio"
-        let hankelh1 = mathCall2 "HankelH1"
-        let hankelh2 = mathCall2 "HankelH2"
         toLambda expr args valueType mathType funcInvokTyp constant value add mul div pow atan2 log abs besselj bessely besseli besselk besseliratio besselkratio hankelh1 hankelh2
 
     [<CompiledName("FormatComplexLambda")>]
@@ -680,20 +740,20 @@ module Linq =
             | Pi -> Some (Expression.Constant (complex Constants.Pi 0.0) :> Expression)
             | I -> Some (Expression.Constant (complex 0.0 1.0) :> Expression)
             //| _ -> None
-        let valueType = typeof<complex>
-        let mathType = typeof<complex>
-        let mathCall1 (name : string) (a : Expression) = Expression.Call(mathType.GetMethod(name, [| valueType |]), a) :> Expression
-        let mathCall2 (name : string) (a : Expression) (b : Expression) = Expression.Call(mathType.GetMethod(name, [| valueType; valueType |]), a, b) :> Expression
-        let add = mathCall2 "Add"
-        let mul = mathCall2 "Multiply"
-        let div = mathCall2 "Divide"
-        let pow = mathCall2 "Pow"
-        let atan2 a b = mathCall1 "Atan" (div a b)
+        let valueTypeComplex = typeof<complex>
+        let mathTypeComplex = typeof<complex>
+        let mathCall1Complex (name : string) (a : Expression) = Expression.Call(mathTypeComplex.GetMethod(name, [| valueTypeComplex |]), a) :> Expression
+        let mathCall2Complex (name : string) (a : Expression) (b : Expression) = Expression.Call(mathTypeComplex.GetMethod(name, [| valueTypeComplex; valueTypeComplex |]), a, b) :> Expression
+        let add = mathCall2Complex "Add"
+        let mul = mathCall2Complex "Multiply"
+        let div = mathCall2Complex "Divide"
+        let pow = mathCall2Complex "Pow"
+        let atan2 a b = mathCall1Complex "Atan" (div a b)
         let log a b =
-            let ln = mathCall1 "Log"
+            let ln = mathCall1Complex "Log"
             div (ln b) (ln a)
-        let abs a = Expression.Convert(mathCall1 "Abs" a, valueType) :> Expression
-        formatLambdaBase expr args valueType mathType None mathCall2 constant value add mul div pow atan2 log abs
+        let abs a = Expression.Convert(mathCall1Complex "Abs" a, valueTypeComplex) :> Expression
+        formatLambdaBase expr args valueTypeComplex mathTypeComplex None mathCall2Complex constant value add mul div pow atan2 log abs
         //let besselj = mathCall2 "BesselJ"
         //let bessely = mathCall2 "BesselY"
         //let besseli = mathCall2 "BesselI"
@@ -806,6 +866,9 @@ module Compile =
                 )
             )
         exprv, cmpl
+
+    let compileExpressionOrThrow2_ (expr_:MathNet.Symbolics.Expression, args_:Symbol list) =
+        compileExpressionOrThrow2 expr_ args_
 
     let compileComplexExpressionOrThrow (expr_:MathNet.Symbolics.Expression) (args_:Symbol list) =
 
@@ -1142,6 +1205,33 @@ module Evaluate =
         | _ ->
             failwithf "orz 0005"
 
+    let renameSymbols (args: Symbol list, expr: MathNet.Symbolics.Expression) : MathNet.Symbolics.Expression * Symbol list =
+        // 建立從原 Symbol 到新 Symbol 的替換對應
+        let replacementPairs =
+            args |> List.mapi (fun i s -> s, Symbol (sprintf "p%d" i))
+
+        let substMap = Map.ofList replacementPairs
+        let newSymbols = replacementPairs |> List.map snd
+
+        // 內部遞迴替換函數
+        let rec rename expr =
+            match expr with
+            | Identifier sym when substMap.ContainsKey sym ->
+                Identifier (substMap.[sym])
+            | Argument sym when substMap.ContainsKey sym ->
+                Argument (substMap.[sym])
+            | Sum terms -> Sum (terms |> List.map rename)
+            | Product terms -> Product (terms |> List.map rename)
+            | Power (a, b) -> Power(rename a, rename b)
+            | PointwiseMul (a, b) -> PointwiseMul(rename a, rename b)
+            | Function (f, x) -> Function(f, rename x)
+            | FunctionN (fn, args) -> FunctionN(fn, args |> List.map rename)
+            | FunInvocation (name, args) -> FunInvocation(name, args |> List.map rename)
+            | _ -> expr
+
+        rename expr, newSymbols
+
+
     [<CompiledName("Evaluate2")>]
     let rec evaluate2 (symbolValues:ConcurrentDictionary<string, FloatingPoint>, sysVarValuesOpt:IDictionary<string, FloatingPoint> option) = function
         | Number n -> Real (float n) |> fnormalize
@@ -1175,6 +1265,13 @@ module Evaluate =
             let evall = xs |> List.map (evaluate2 (symbolValues, sysVarValuesOpt))
             let reducel = evall |> List.reduce fmultiply
             reducel |> fnormalize
+        | PointwiseMul (l, r) ->
+                let lv = evaluate2 (symbolValues, sysVarValuesOpt) l
+                let rv = evaluate2 (symbolValues, sysVarValuesOpt) r
+                try
+                    lv .* rv
+                with ex ->
+                    failwithf "PointwiseMul evaluation failed:\nLeft = %A\nRight = %A\nError = %s" lv rv ex.Message
         | Power (r, p) -> fpower (evaluate2 (symbolValues, sysVarValuesOpt) r) (evaluate2 (symbolValues, sysVarValuesOpt) p) |> fnormalize
         | Function (f, x) -> fapply f (evaluate2 (symbolValues, sysVarValuesOpt) x) |> fnormalize
         | FunctionN (f, xs) -> xs |> List.map (evaluate2 (symbolValues, sysVarValuesOpt)) |> fapplyN f |> fnormalize
@@ -1439,6 +1536,8 @@ module Evaluate =
                         |> List.except updatedSL
                         |> List.append updatedSL
                         |> fun u ->
+                            //if u.Length > allSymbols.Length then
+                            //    FAkka.Microsoft.FSharp.Core.LeveledPrintf.frintfn FAkka.Microsoft.FSharp.Core.LeveledPrintf.PRINTLEVEL.PWARN "Dynamic symbol list occured:\r\nOriginal: %A\r\n:Updated: %A" allSymbols u
                             u, traversed
 
 
@@ -1447,7 +1546,7 @@ module Evaluate =
                 | DTExp (parentFxParamSymbols, parentFxBody) ->
                     if parentFxParamSymbols.Length <> paramValueExprList.Length then
                         failwithf "%s parameter length not matched %A <-> %A" parentFxName parentFxParamSymbols paramValueExprList
-
+                         
                     let passIn =
                         parentFxParamSymbols
                         |> Seq.mapi (fun i sb ->
@@ -1460,12 +1559,16 @@ module Evaluate =
                     | FunInvocation _ ->
                         evaluate2 (symbolValues, (Some (dict passIn))) parentFxBody
                     | _ ->
-                        let uSL, frv = nestedFxHandler parentFxParamSymbols parentFxBody symbolValues (Some (dict passIn))
-                        let expr, cmpl = Compile.compileExpressionOrThrow2 frv uSL
+                        let uSL, frv =
+                            nestedFxHandler parentFxParamSymbols parentFxBody symbolValues (Some (dict passIn))
+                        let rFrv, rUSl = renameSymbols (uSL, frv) //20250413 symbol 名稱統一化後，快取才有意義
+
+                        let expr, cmpl = Compile.compileExpressionOrThrow2 rFrv rUSl
                         let param_val = cal_param_obj_val ()
                         
                         let rst =
                             cmpl.DynamicInvoke(
+                                //20250413 symbol 名稱統一化後，取值仍需要用原先的變數名，所以上面的 uSL 不能少
                                 Array.append param_val (uSL |> List.skip parentFxParamSymbols.Length |> List.map (fun s -> box symbolValues[s.SymbolName]) |> List.toArray)
                             )
                         obj2FloatPoint rst

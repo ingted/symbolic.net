@@ -60,6 +60,11 @@ type Value =
                     frintfn PRINTLEVEL.PTRACE "%A" <| Approximation (Real (vlv + vrv))
 #endif
                     Approximation (Real (vlv + vrv))
+                | RealVec vrv ->
+#if DEBUG
+                    frintfn PRINTLEVEL.PTRACE "%A" <| RealVec (vrv + vlv)
+#endif
+                    RealVec (vrv + vlv)
 #if TENSOR_SUPPORT
                 | DSTen dt ->
 #if DEBUG
@@ -144,6 +149,19 @@ type Value =
                 DSTen (vl + dt)
 #endif
 
+        static member (.*) (a: Value, b: Value) =
+#if DEBUG
+            frintf PRINTLEVEL.PTRACE "%A * %A => " a b
+#endif
+            match a, b with
+            | Value.RealVec x, Value.RealVec y ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| Value.RealVec (x.PointwiseMultiply y)
+#endif
+                Value.RealVec (x.PointwiseMultiply y)
+            | _ ->
+                failwithf "PointwiseMultiply not supported for these:\r\na: %A\r\nb: %A" a b
+
         static member (*) (a: Value, b: Value) =
 #if DEBUG
             frintf PRINTLEVEL.PTRACE "%A * %A => " a b
@@ -189,21 +207,6 @@ type Value =
             | _ ->
                 failwithf "Multiply not supported for these:\r\na: %A\r\nb: %A" a b
 
-        //static member (*) (a: Value, b: Value) =
-        //    match a, b with
-        //    | Value.Approximation (Complex c), Value.Approximation y ->
-        //        Value.Approximation (Complex (c * (y.ComplexValue)))
-        //    | Value.Approximation x, Value.Approximation (Complex c) ->
-        //        Value.Approximation (Complex ((x.ComplexValue) * c))
-        //    | Value.Approximation (Real x), Value.Approximation (Real y) ->
-        //        Value.Approximation (Real (x * y))
-        //    | Value.RealVec x, Value.Approximation (Real y) ->
-        //        Value.RealVec (x * y)
-        //    | Value.Approximation (Real x), Value.RealVec y ->
-        //        Value.RealVec (x * y)
-        //    | _ ->
-        //        failwithf "Multiply not supported for these:\r\na: %A\r\nb: %A" a b
-    
 
 [<RequireQualifiedAccess>]
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
