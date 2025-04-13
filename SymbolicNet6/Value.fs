@@ -28,10 +28,11 @@ type Value =
 #if TENSOR_SUPPORT
     | DSTen of Tensor
 #endif
-    with 
+    with
+        //001
         static member (+) (vl : Value, vr : Value) =
 #if DEBUG
-            frintf PRINTLEVEL.PTRACE "%A + %A => " vl vr
+            frintf PRINTLEVEL.PTRACE "|001| %A + %A => " vl vr
 #endif
             match vl with
             | Number vlv ->
@@ -72,9 +73,10 @@ type Value =
 #endif
                     DSTen (vlv + dt)
 #endif
+        //002
         static member (*) (vl : Value, vr : float) =
 #if DEBUG
-            frintf PRINTLEVEL.PTRACE "%A * %A => " vl vr
+            frintf PRINTLEVEL.PTRACE "|002| %A * %A => " vl vr
 #endif
             match vl with
             | Approximation (Real vlv) ->
@@ -87,9 +89,11 @@ type Value =
                 frintfn PRINTLEVEL.PTRACE "%A" <| RealVec (lv * vr)
 #endif
                 RealVec (lv * vr)
+
+        //003
         static member (*) (vl : float, vr : Value) =
 #if DEBUG
-            frintf PRINTLEVEL.PTRACE "%A * %A => " vl vr
+            frintf PRINTLEVEL.PTRACE "|003| %A * %A => " vl vr
 #endif
             match vr with
             | Approximation (Real vrv) ->
@@ -102,9 +106,11 @@ type Value =
                 frintfn PRINTLEVEL.PTRACE "%A" <| RealVec (rv * vl)
 #endif
                 RealVec (rv * vl)
+
+        //004
         static member (+) (vl : Value, vr : float) =
 #if DEBUG
-            frintf PRINTLEVEL.PTRACE "%A + %A => " vl vr
+            frintf PRINTLEVEL.PTRACE "|004| %A + %A => " vl vr
 #endif
             match vl with
             | Approximation (Real vlv) ->
@@ -124,9 +130,10 @@ type Value =
 #endif
                 DSTen (vr + dt)
 #endif
+        //005
         static member (+) (vl : float, vr : Value) =
 #if DEBUG
-            frintf PRINTLEVEL.PTRACE "%A + %A => " vl vr
+            frintf PRINTLEVEL.PTRACE "|005| %A + %A => " vl vr
 #endif
             match vr with
             | Approximation vrv ->
@@ -162,9 +169,10 @@ type Value =
             | _ ->
                 failwithf "PointwiseMultiply not supported for these:\r\na: %A\r\nb: %A" a b
 
+        //006
         static member (*) (a: Value, b: Value) =
 #if DEBUG
-            frintf PRINTLEVEL.PTRACE "%A * %A => " a b
+            frintf PRINTLEVEL.PTRACE "|006| %A * %A => " a b
 #endif
             match a, b with
             | Value.Approximation (Complex c), Value.Approximation y ->

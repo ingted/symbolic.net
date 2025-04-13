@@ -1,4 +1,4 @@
-#I @"..\..\SymbolicNet6\bin\net9.0\"
+Ôªø#I @"..\..\SymbolicNet6\bin\net9.0\"
 #r @"SymbolicNet6.dll"
 #r @"..\..\scripts\FsProfiler\FsProfiler.dll"
 //#r @"nuget: MathNet.Numerics"
@@ -9,7 +9,7 @@
 #r "nuget: DiffSharp.Core, 1.0.7"
 #r "nuget: DiffSharp.Backends.Reference, 1.0.7"
 #r "nuget: DiffSharp.Backends.Torch, 1.0.7"
-#r @"G:\coldfar_py\sharftrade9\πÍ≈Á\SharFTrade.Exp\bin2\net9.0\protobuf-net.Core.dll"
+#r @"G:\coldfar_py\sharftrade9\ÂØ¶È©ó\SharFTrade.Exp\bin2\net9.0\protobuf-net.Core.dll"
 //#I @"..\SymbolicNet6"
 //#load @".\Symbols.fs"
 //#load @".\Approximation.fs"
@@ -87,7 +87,7 @@ open MathNet.Numerics.LinearAlgebra
 let s_ = seq [1.0; 2.0; 3.0]
 let v_ : Vector<float> = Vector<float>.Build.DenseOfEnumerable(s_)
 
-Infix.parseOrThrow "sum(i, 1, n, i^2)"//§£§‰¥©
+Infix.parseOrThrow "sum(i, 1, n, i^2)"//‰∏çÊîØÊè¥
 
 SymbolicExpression(Sum([Number<|BigRational.FromInt 1;Number <| BigRational.FromInt 1 ])).Evaluate(dict [])
 LaTeX.format (Sum([Number<|BigRational.FromInt 1;Number <| BigRational.FromInt 1;Number <| BigRational.FromInt 2 ]))
@@ -127,8 +127,8 @@ SymbolicExpression(Power
        )
 ).Evaluate(dict[ "x", FloatingPoint.Real 2.0; ])
 
-#r @"G:\coldfar_py\sharftrade9\πÍ≈Á\ExperimentsContainer\../SharFTrade.Exp/bin2/net9.0\protobuf-net.dll"
-#r @"G:\coldfar_py\sharftrade9\πÍ≈Á\ExperimentsContainer\../SharFTrade.Exp/bin2/net9.0\protobuf-net.Core.dll"
+#r @"G:\coldfar_py\sharftrade9\ÂØ¶È©ó\ExperimentsContainer\../SharFTrade.Exp/bin2/net9.0\protobuf-net.dll"
+#r @"G:\coldfar_py\sharftrade9\ÂØ¶È©ó\ExperimentsContainer\../SharFTrade.Exp/bin2/net9.0\protobuf-net.Core.dll"
 
 let power = Power (
     Number 2N,
@@ -218,7 +218,7 @@ let rec collectParamsAndBody (e: Expression) =
         [], other
 
 
-//let args, body = translateExpr liq //´·≠±∑|ø˘ª~°A•øΩT™©•ª¨O collectParamsAndBody
+//let args, body = translateExpr liq //ÂæåÈù¢ÊúÉÈåØË™§ÔºåÊ≠£Á¢∫ÁâàÊú¨ÊòØ collectParamsAndBody
 let args, body = collectParamsAndBody liq
 let f = Expression.Lambda<Func<int, int, int, int>>(body, args |> Array.ofSeq)
 f.Compile().Invoke(10, 11, 2)
@@ -230,6 +230,49 @@ aa.ToString()
 
 
 let _ =
-    define "¶®•Ê©˙≤”" ([],
+    define "Êàê‰∫§ÊòéÁ¥∞" ([],
         SymbolicExpression.XParse "1") 
-SymbolicExpression(SymbolicExpression.XParse "2 + ¶®•Ê©˙≤”()").Evaluate(dict [])
+SymbolicExpression(SymbolicExpression.XParse "2 + Êàê‰∫§ÊòéÁ¥∞()").Evaluate(dict [])
+
+
+
+let expr = PointwiseMul (
+    Number 2N,
+    Identifier (Symbol "v")
+)
+
+open System.Collections.Concurrent
+open System.Collections.Generic
+
+type ConcurrentDictionary<'k,'v>  with 
+    static member op_Implicit (x:IDictionary<'k,'v>) =
+        ConcurrentDictionary<'k,'v> x
+
+type IDictionary<'k,'v>  with 
+    static member op_Implicit (x:IDictionary<'k,'v>) =
+        ConcurrentDictionary<'k,'v> x
+
+
+let env =
+    dict [
+        "v", FloatingPoint.RealVector (vector [10.0; 20.0; 30.0])
+    ]
+    |> ConcurrentDictionary<_, _>
+
+let result = Evaluate.evaluate2_ env None expr
+// ‚ûú RealVector [20.0; 40.0; 60.0]
+
+type FooParam =
+| BoolParam of bool
+| StrParam of string
+with 
+    static member op_Implicit(x: bool) = BoolParam x
+    static member op_Implicit(x: string) = StrParam x
+
+
+let foo (x: FooParam) = 
+    match x with
+    | BoolParam y -> printfn "Bool: %A" y
+    | StrParam z -> printfn "String: %A" z
+
+foo true

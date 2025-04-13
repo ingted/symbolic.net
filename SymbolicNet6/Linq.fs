@@ -764,7 +764,6 @@ module Linq =
         //let hankelh2 = mathCall2 "HankelH2"
         //toLambda expr args valueType mathType constant value add mul div pow atan2 log abs besselj bessely besseli besselk besseliratio besselkratio hankelh1 hankelh2
 
-
 module Compile =
     let compiledCache0 = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, LambdaExpression option>()
     let delegateCache0 = new System.Collections.Concurrent.ConcurrentDictionary<MathNet.Symbolics.Expression * Symbol list, Delegate option>()
@@ -906,10 +905,6 @@ module Compile =
     let compileComplexExpression2OrThrow expr arg1 arg2 = compileComplexExpressionOrThrow expr [ arg1; arg2 ] :?> Func<complex, complex, complex>
     let compileComplexExpression3OrThrow expr arg1 arg2 arg3 = compileComplexExpressionOrThrow expr [ arg1; arg2; arg3 ] :?> Func<complex, complex, complex, complex>
     let compileComplexExpression4OrThrow expr arg1 arg2 arg3 arg4 = compileComplexExpressionOrThrow expr [ arg1; arg2; arg3; arg4 ] :?> Func<complex, complex, complex, complex, complex>
-
-
-
-
 
 module Evaluate =
 
@@ -1693,6 +1688,8 @@ module Evaluate =
                     f ()
                     Undef
 
+    let evaluate2_ (symbolValues:ConcurrentDictionary<string, FloatingPoint>) (sysVarValuesOpt:IDictionary<string, FloatingPoint> option) =
+        evaluate2 (symbolValues, sysVarValuesOpt)
 
     [<CompiledName("Evaluate")>]
     let rec evaluate (symbols:IDictionary<string, FloatingPoint>) =

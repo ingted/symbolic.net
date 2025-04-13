@@ -80,7 +80,9 @@ and [<NoComparison>] FloatingPoint =
     static member (*) ((a:float), (b: FloatingPoint)) =
         Real 0
     static member (*) ((a:FloatingPoint), (b: float)) =
-        Real 0 
+        Real 0
+
+
     member x.RealValue =
         match x with
         | Real x -> x
@@ -134,10 +136,24 @@ and [<NoComparison>] FloatingPoint =
         | Series x -> x
         | _ -> failwith "Value not convertible to a Series."
 
+    //static member (.*) (a: FloatingPoint, b: FloatingPoint) : FloatingPoint =
+    //    match a, b with
+    //    | RealVector va, RealVector vb when va.Count = vb.Count ->
+    //        RealVector (va.PointwiseMultiply vb)
+    //    | _ ->
+    //        failwithf "FloatingPoint .*. not supported for:\na = %A\nb = %A" a b
     static member (.*) (a: FloatingPoint, b: FloatingPoint) : FloatingPoint =
         match a, b with
+        // 向量與向量：標準逐元素乘
         | RealVector va, RealVector vb when va.Count = vb.Count ->
             RealVector (va.PointwiseMultiply vb)
+
+        // scalar broadcast
+        | Real r, RealVector v
+        | RealVector v, Real r ->
+            RealVector (v * r)  // MathNet.Numerics 支援 scalar .* vector
+
+        // fallback
         | _ ->
             failwithf "FloatingPoint .*. not supported for:\na = %A\nb = %A" a b
 
