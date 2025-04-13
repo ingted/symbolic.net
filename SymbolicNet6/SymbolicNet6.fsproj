@@ -34,6 +34,24 @@
         <None Include="scripts\Strategy.fsx" />
         <None Include="scripts\test.fsx" />
         <None Include="scripts\Program.fs" />
+
+        <Compile Include="G:\coldfar_py\sharftrade9\Libs\FAkka.Shared\sr.fsi">
+            <Link>print/sr.fsi</Link>
+        </Compile>
+        <Compile Include="G:\coldfar_py\sharftrade9\Libs\FAkka.Shared\sr.fs">
+            <Link>print/sr.fs</Link>
+        </Compile>
+        <Compile Include="G:\coldfar_py\sharftrade9\Libs\FAkka.Shared\sformat.fsi">
+            <Link>print/sformat.fsi</Link>
+        </Compile>
+        <Compile Include="G:\coldfar_py\sharftrade9\Libs\FAkka.Shared\sformat.fs">
+            <Link>print/sformat.fs</Link>
+        </Compile>
+        <Compile Include="G:\coldfar_py\sharftrade9\Libs\FAkka.Shared\printf.fs">
+            <Link>print/printf.fs</Link>
+        </Compile>
+
+
         <Compile Include="Symbols.fs" />
         <Compile Include="Approximation.fs" />
         <Compile Include="Value.fs" />

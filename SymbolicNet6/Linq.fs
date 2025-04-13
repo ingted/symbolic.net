@@ -1155,16 +1155,20 @@ module Evaluate =
         | Approximation (Approximation.Real fp) -> Real fp
         | Approximation (Approximation.Complex fp) -> Complex fp
         | Identifier (Symbol s) ->
-            match symbolValues.TryGetValue s with
-            | true, a -> a |> fnormalize
-            | _ ->
+            
                 if sysVarValuesOpt.IsNone then
-                    failwithf  "Failed to find symbol %s" s
+                    match symbolValues.TryGetValue s with
+                    | true, a -> a |> fnormalize
+                    | _ ->
+                        failwithf  "Failed to find symbol %s" s
                 else
                     match sysVarValuesOpt.Value.TryGetValue s with
                     | true, a -> a |> fnormalize
                     | _ ->
-                        failwithf  "Failed to find symbol %s" s
+                        match symbolValues.TryGetValue s with
+                        | true, a -> a |> fnormalize
+                        | _ ->
+                            failwithf  "Failed to find symbol %s" s
         | Argument (Symbol s) -> failwithf  "Cannot evaluate a argument %s" s
         | Sum xs -> xs |> List.map (evaluate2 (symbolValues, sysVarValuesOpt)) |> List.reduce fadd |> fnormalize
         | Product xs ->
@@ -1364,60 +1368,8 @@ module Evaluate =
                             failwithf "orz 0006"
                     ) param_val.[0]
                 | _ ->
-                    failwithf "omg fnm!!!"
+                    failwithf $"omg fnm {parentFxName}!!!"
             else
-                //let rec analysisFx (sl:Symbol list) (fxExpr:MathNet.Symbolics.Expression) =
-                //    (*
-                //        let _ =
-                //            cur3fto1v "ma_base" ((
-                //                fun cur cmid scale pos -> //vector [1.0;2;3]
-                //                    printfn "cur => %A" cur //cur = 0 是用來表示"當根"
-                //                    if scale = 30.0 || cmid <> 0 then //ES連續月目前以 0 表示
-                //                        vector [1.5; 2.5; 3.5]
-                //                    else
-                //                        failwithf "scale not supported"
-    
-                //                ), Symbol "cur")
-
-                //        let _ =
-                //            define "ma" ([Symbol "cmid"; Symbol "scale"; Symbol "pos"],
-                //                SymbolicExpression.XParse "ma_base(cmid, scale, pos)")
-
-                //    *) //evaluate2 (symbolValues, sysVarValues) frv
-                //    match fxExpr with
-                //    | FunInvocation ((Symbol sb), origParamExp) when funDict.ContainsKey sb -> //例如 funDict 包含 ma_base
-                //        match funDict.[sb] with
-                //        | DTExp (param2, fx2) -> analysisFx param2 fx2 //ma 的 定義 就是 FunInvocation (Symbol "ma_base", _)
-                //        | KeyWord ->
-                //            let substitute = ((Symbol sb), paramValueExprList) 
-                //            Choice2Of2 <| FunInvocation substitute
-                //        | _ ->
-                //            failwith "Nested FunInvocation haven't yet implemented"
-                //    | FunInvocation ((Symbol sb), _) ->
-                //        let substitute = ((Symbol sb), paramValueExprList) 
-                //        Choice2Of2 <| FunInvocation substitute
-                //    | _ -> Choice1Of2 fxExpr //Choice1Of2 不是funInvoke
-
-
-                //let rec nestedFxHandler (sl:Symbol list) (fxExpr:MathNet.Symbolics.Expression) =
-                //    match fxExpr with
-                //    | FunInvocation ((Symbol sb), origParamExp) when funDict.ContainsKey sb -> //例如 funDict 包含 ma_base
-                //        match funDict.[sb] with
-                //        | DTExp (param2, fx2) -> nestedFxHandler param2 fx2 //ma 的 定義 就是 FunInvocation (Symbol "ma_base", _)
-                //        | KeyWord ->
-                //            let substitute = ((Symbol sb), paramValueExprList) 
-                //            Choice2Of2 <| ([], FunInvocation substitute)
-                //        | _ ->
-                //            failwith "Nested FunInvocation haven't yet implemented"
-                //    | FunInvocation ((Symbol sb), _) ->
-                //        let substitute = ((Symbol sb), paramValueExprList) 
-                //        Choice2Of2 <| ([], FunInvocation substitute)
-                //    | _ ->
-                //        let extraParams =
-                //            ExpressionHelpFun.collectIdentifiers fxExpr
-                //            |> fun cb ->
-                //                List.except sl (cb |> Seq.toList)
-                //        Choice1Of2 (extraParams, fxExpr)
 
                 let rec nestedFxHandler
                     (sl: Symbol list) //fxExpr 中 sl 的變數需要
@@ -1472,12 +1424,13 @@ module Evaluate =
 
                         let newSymbolNameAggRst = $"__{sb}_{Guid.NewGuid().ToString()}__"
                         let newSymbolAggRst = Symbol newSymbolNameAggRst
-                        let evaluatedFunValue = evaluate2 (symbolValues_, sysVarValues_) (FunInvocation ((Symbol sb), evaluatedValue))
+                        //let evaluatedFunValue = evaluate2 (symbolValues_, sysVarValues_) (FunInvocation ((Symbol sb), evaluatedValue))
+                        let evaluatedFunValue = evaluate2 (symbolValues_, None) (FunInvocation ((Symbol sb), evaluatedValue))
                         symbolValues_.TryAdd(newSymbolNameAggRst, evaluatedFunValue) |> ignore
                         sl, Identifier newSymbolAggRst
 
                     | FunInvocation _ ->
-                        failwith "Undefined func"
+                        failwith $"Undefined func {fxExpr}"
                         
                     | _ ->
                         let updatedSL, traversed = traverse sl fxExpr
@@ -1517,7 +1470,58 @@ module Evaluate =
                             )
                         obj2FloatPoint rst
 
+                //| DTProc procList ->
+                    //let runOneProc (paramSymbols, defBody, outputSymbols) =
+                    //    // 將輸入 Symbol list 轉成對應的 FloatingPoint list
+                    //    let inputValues =
+                    //        paramSymbols
+                    //        |> List.map (fun sym ->
+                    //            match symbolValues.TryGetValue(sym.SymbolName) with
+                    //            | true, v ->
+                    //                match v with
+                    //                | Floating f -> f
+                    //                | _ -> failwithf "DTProc input symbol %s must be Floating" sym.SymbolName
+                    //            | _ -> failwithf "DTProc input symbol %s not found" sym.SymbolName
+                    //        )
 
+                    //    // 建立一個空白環境（或者從 symbolValues 建立？）
+                    //    let env = ConcurrentDictionary<string, FloatingPoint>()
+
+                    //    // 評估 DefBody
+                    //    match defBody with
+                    //    | DBFun f ->
+                    //        let updatedEnv = f env inputValues
+                    //        outputSymbols
+                    //        |> List.map (fun sym ->
+                    //            match updatedEnv.TryGetValue(sym.SymbolName) with
+                    //            | true, fp -> Floating fp
+                    //            | _ -> failwithf "DTProc output symbol %s not found" sym.SymbolName
+                    //        )
+                    //    | DBExp exprArr ->
+                    //        // 用目前 symbolValues 映射成 IDictionary<string, FloatingPoint> 供 evaluate 使用
+                    //        let localEnv =
+                    //            symbolValues
+                    //            |> Seq.choose (fun kvp ->
+                    //                match kvp.Value with
+                    //                | Floating f -> Some (kvp.Key, f)
+                    //                | _ -> None
+                    //            )
+                    //            |> dict
+
+                    //        let results =
+                    //            exprArr
+                    //            |> Array.map (fun expr -> Linq.ExprHelper.evaluate localEnv expr)
+
+                    //        if results.Length <> outputSymbols.Length then
+                    //            failwithf "DTProc DBExp output length mismatch: expected %d but got %d" outputSymbols.Length results.Length
+
+                    //        Array.zip outputSymbols results
+                    //        |> Array.map (fun (sym, f) -> Floating f)
+                    //        |> Array.toList
+                    //// collect 所有 proc 結果
+                    //procList
+                    //|> List.collect runOneProc
+                    //|> ValueList
                     //match fx_real with
                     //| Choice1Of2 (extraParams, frv) ->
                     //    let expr, cmpl = Compile.compileExpressionOrThrow2 frv (List.append param extraParams)
@@ -1528,46 +1532,46 @@ module Evaluate =
                     //    failwith "orz123"
                     //| Choice2Of2 (extraParams, frv) ->
                     //    evaluate2 (symbolValues_, sysVarValues) frv
+#if DTPROC
+                | DTProc procList ->
+                    let rec evalProc (sds:((Symbol list) * DefBody * (Symbol list)) list) (previousOutput:ConcurrentDictionary<string, FloatingPoint>) =
+                        match sds with
+                        | [] -> previousOutput
+                        | (_params, body, sysVars)::rest ->
+                            match body with
+                            | DBExp fxs ->
+                                let param_val:obj[] = cal_param_obj_val ()                    
+                                let step, rst =
+                                    fxs
+                                    |> Array.fold (fun (i, s) fx ->
+                                        let fx_real = nestedFxHandler _params fx
+                                        match fx_real with
+                                        | Choice1Of2 (extraParams, frv) ->
+                                            let expr, cmpl = Compile.compileExpressionOrThrow2 frv (List.append sysVars _params)
+                                            let rst2 =
+                                                if i = 0 then
+                                                    let passInSysVarValues =
+                                                        if sysVarValues.IsSome then
+                                                            sysVars |> List.map (fun sysVar -> box sysVarValues.Value[sysVar.SymbolName]) |> List.toArray
+                                                        else
+                                                            [||]
+                                                    cmpl.DynamicInvoke(Array.append passInSysVarValues param_val)
+                                                else
+                                                    cmpl.DynamicInvoke([|box s|])
+                                            ///ConcurrentDictionary<string, FloatingPoint> (dict [ "__output__", obj2FloatPoint rst ])
+                                            (i+1), obj2FloatPoint rst2
+                                        | Choice2Of2 (extraParams, frv) ->     
+                                            //ConcurrentDictionary<string, FloatingPoint> (dict [ "__output__", evaluate2 (previousOutput, sysVarValues) frv ])
+                                            (i+1), evaluate2 (previousOutput, sysVarValues) frv
 
-                //| DTProc procList ->
-                //    let rec evalProc (sds:((Symbol list) * DefBody * (Symbol list)) list) (previousOutput:ConcurrentDictionary<string, FloatingPoint>) =
-                //        match sds with
-                //        | [] -> previousOutput
-                //        | (_params, body, sysVars)::rest ->
-                //            match body with
-                //            | DBExp fxs ->
-                //                let param_val:obj[] = cal_param_obj_val ()                    
-                //                let step, rst =
-                //                    fxs
-                //                    |> Array.fold (fun (i, s) fx ->
-                //                        let fx_real = nestedFxHandler _params fx
-                //                        match fx_real with
-                //                        | Choice1Of2 (extraParams, frv) ->
-                //                            let expr, cmpl = Compile.compileExpressionOrThrow2 frv (List.append sysVars _params)
-                //                            let rst2 =
-                //                                if i = 0 then
-                //                                    let passInSysVarValues =
-                //                                        if sysVarValues.IsSome then
-                //                                            sysVars |> List.map (fun sysVar -> box sysVarValues.Value[sysVar.SymbolName]) |> List.toArray
-                //                                        else
-                //                                            [||]
-                //                                    cmpl.DynamicInvoke(Array.append passInSysVarValues param_val)
-                //                                else
-                //                                    cmpl.DynamicInvoke([|box s|])
-                //                            ///ConcurrentDictionary<string, FloatingPoint> (dict [ "__output__", obj2FloatPoint rst ])
-                //                            (i+1), obj2FloatPoint rst2
-                //                        | Choice2Of2 (extraParams, frv) ->     
-                //                            //ConcurrentDictionary<string, FloatingPoint> (dict [ "__output__", evaluate2 (previousOutput, sysVarValues) frv ])
-                //                            (i+1), evaluate2 (previousOutput, sysVarValues) frv
-
-                //                    ) (0, Undef)
-                //                ConcurrentDictionary<string, FloatingPoint> (dict [ "__output__",  rst])
-                //            | DBFun f ->
-                //                let rst = f previousOutput (cal_param_fd_val ())                                
-                //                evalProc rest rst
-                //    let cd = evalProc procList (ConcurrentDictionary<_, _> symbolValues)
-                //    cd["__output__"]
-
+                                    ) (0, Undef)
+                                ConcurrentDictionary<string, FloatingPoint> (dict [ "__output__",  rst])
+                            | DBFun f ->
+                                let rst = f previousOutput (cal_param_fd_val ())                                
+                                evalProc rest rst
+                    let cd = evalProc procList (ConcurrentDictionary<_, _> symbolValues)
+                    cd["__output__"]
+#endif
                 | DTFunI1toI1 f ->
                     let param_val = cal_param_real_val ()
                     f (int param_val.[0]) |> float |> Real

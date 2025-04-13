@@ -3,6 +3,8 @@
 open System
 open MathNet.Numerics
 open MathNet.Numerics.LinearAlgebra
+open FAkka.Microsoft.FSharp.Core
+open LeveledPrintf
 #if TENSOR_SUPPORT
 open DiffSharp
 #endif
@@ -28,65 +30,179 @@ type Value =
 #endif
     with 
         static member (+) (vl : Value, vr : Value) =
+#if DEBUG
+            frintf PRINTLEVEL.PTRACE "%A + %A => " vl vr
+#endif
             match vl with
             | Number vlv ->
                 match vr with
                 | Number vrv ->
+#if DEBUG
+                    frintfn PRINTLEVEL.PTRACE "%A" <| Number (vlv * vrv)
+#endif
                     Number (vlv * vrv)
             | RealVec vlv ->
                 match vr with
                 | Approximation (Real vrv) ->
+#if DEBUG
+                    frintfn PRINTLEVEL.PTRACE "%A" <| RealVec (vlv + vrv)
+#endif
                     RealVec (vlv + vrv)
                 | RealVec vrv ->
+#if DEBUG
+                    frintfn PRINTLEVEL.PTRACE "%A" <| RealVec (vlv + vrv)
+#endif
                     RealVec (vlv + vrv)
             | Approximation (Real vlv) ->
                 match vr with
                 | Approximation (Real vrv) ->
+#if DEBUG
+                    frintfn PRINTLEVEL.PTRACE "%A" <| Approximation (Real (vlv + vrv))
+#endif
                     Approximation (Real (vlv + vrv))
 #if TENSOR_SUPPORT
                 | DSTen dt ->
+#if DEBUG
+                    frintfn PRINTLEVEL.PTRACE "%A" <| DSTen (vlv + dt)
+#endif
                     DSTen (vlv + dt)
 #endif
         static member (*) (vl : Value, vr : float) =
+#if DEBUG
+            frintf PRINTLEVEL.PTRACE "%A * %A => " vl vr
+#endif
             match vl with
             | Approximation (Real vlv) ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| Approximation (Real (vlv * vr))
+#endif
                 Approximation (Real (vlv * vr))
             | RealVec lv ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| RealVec (lv * vr)
+#endif
                 RealVec (lv * vr)
         static member (*) (vl : float, vr : Value) =
+#if DEBUG
+            frintf PRINTLEVEL.PTRACE "%A * %A => " vl vr
+#endif
             match vr with
             | Approximation (Real vrv) ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| Approximation (Real (vl * vrv)) 
+#endif
                 Approximation (Real (vl * vrv))
             | RealVec rv ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| RealVec (rv * vl)
+#endif
                 RealVec (rv * vl)
         static member (+) (vl : Value, vr : float) =
+#if DEBUG
+            frintf PRINTLEVEL.PTRACE "%A + %A => " vl vr
+#endif
             match vl with
             | Approximation (Real vlv) ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| Approximation (Real (vlv + vr))
+#endif
                 Approximation (Real (vlv + vr))
             | RealVec vlv ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| RealVec (vlv + vr)
+#endif
                 RealVec (vlv + vr)
 #if TENSOR_SUPPORT
             | DSTen dt ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| DSTen (vr + dt)
+#endif
                 DSTen (vr + dt)
 #endif
         static member (+) (vl : float, vr : Value) =
+#if DEBUG
+            frintf PRINTLEVEL.PTRACE "%A + %A => " vl vr
+#endif
             match vr with
             | Approximation vrv ->
                 match vrv with
                 | Approximation.Real vrvv ->
+#if DEBUG
+                    frintfn PRINTLEVEL.PTRACE "%A" <| Approximation (Real (vl + vrvv))
+#endif
                     Approximation (Real (vl + vrvv))
             | RealVec rv ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| RealVec (rv + vl)
+#endif
                 RealVec (rv + vl)
 #if TENSOR_SUPPORT
             | DSTen dt ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| DSTen (vl + dt)
+#endif
                 DSTen (vl + dt)
 #endif
+
         static member (*) (a: Value, b: Value) =
+#if DEBUG
+            frintf PRINTLEVEL.PTRACE "%A * %A => " a b
+#endif
             match a, b with
-            | Value.Approximation (Complex c), Value.Approximation y -> Value.Approximation (Complex (c * (y.ComplexValue)))
-            | Value.Approximation x, Value.Approximation (Complex c) -> Value.Approximation (Complex ((x.ComplexValue) * c))
-            | Value.Approximation (Real x), Value.Approximation (Real y) -> Value.Approximation (Real (x * y))
-            | _ -> failwith "Multiply not supported for these"
+            | Value.Approximation (Complex c), Value.Approximation y ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| Value.Approximation (Complex (c * y.ComplexValue))
+#endif
+                Value.Approximation (Complex (c * y.ComplexValue))
+            | Value.Approximation x, Value.Approximation (Complex c) ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| Value.Approximation (Complex (x.ComplexValue * c))
+#endif
+                Value.Approximation (Complex (x.ComplexValue * c))
+            | Value.Approximation (Real x), Value.Approximation (Real y) ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| Value.Approximation (Real (x * y))
+#endif
+                Value.Approximation (Real (x * y))
+            | Value.RealVec x, Value.Approximation (Real y) ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| Value.RealVec (x * y)
+#endif
+                Value.RealVec (x * y)
+            | Value.Approximation (Real x), Value.RealVec y ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| Value.RealVec (x * y)
+#endif
+                Value.RealVec (x * y)
+#if TENSOR_SUPPORT
+            | Value.Approximation (Real x), Value.DSTen t ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| Value.DSTen (x * t)
+#endif
+                Value.DSTen (x * t)
+            | Value.DSTen t, Value.Approximation (Real x) ->
+#if DEBUG
+                frintfn PRINTLEVEL.PTRACE "%A" <| Value.DSTen (t * x)
+#endif
+                Value.DSTen (t * x)
+#endif
+            | _ ->
+                failwithf "Multiply not supported for these:\r\na: %A\r\nb: %A" a b
+
+        //static member (*) (a: Value, b: Value) =
+        //    match a, b with
+        //    | Value.Approximation (Complex c), Value.Approximation y ->
+        //        Value.Approximation (Complex (c * (y.ComplexValue)))
+        //    | Value.Approximation x, Value.Approximation (Complex c) ->
+        //        Value.Approximation (Complex ((x.ComplexValue) * c))
+        //    | Value.Approximation (Real x), Value.Approximation (Real y) ->
+        //        Value.Approximation (Real (x * y))
+        //    | Value.RealVec x, Value.Approximation (Real y) ->
+        //        Value.RealVec (x * y)
+        //    | Value.Approximation (Real x), Value.RealVec y ->
+        //        Value.RealVec (x * y)
+        //    | _ ->
+        //        failwithf "Multiply not supported for these:\r\na: %A\r\nb: %A" a b
     
 
 [<RequireQualifiedAccess>]

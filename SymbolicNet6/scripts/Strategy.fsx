@@ -1,4 +1,4 @@
-#I @"..\..\SymbolicNet6\bin\Debug\net9.0\"
+#I @"..\..\SymbolicNet6\bin\net9.0\"
 #r @"SymbolicNet6.dll"
 #r @"..\..\scripts\FsProfiler\FsProfiler.dll"
 //#r @"nuget: MathNet.Numerics"
