@@ -237,8 +237,9 @@ SymbolicExpression(SymbolicExpression.XParse "2 + 成交明細()").Evaluate(dict
 
 
 let expr = PointwiseMul (
-    Number 2N,
-    Identifier (Symbol "v")
+    
+    Identifier (Symbol "u")
+    , Identifier (Symbol "v")
 )
 
 open System.Collections.Concurrent
@@ -255,12 +256,32 @@ type IDictionary<'k,'v>  with
 
 let env =
     dict [
+        "u", FloatingPoint.RealVector (vector [10.0; 20.0; 30.0])
         "v", FloatingPoint.RealVector (vector [10.0; 20.0; 30.0])
     ]
     |> ConcurrentDictionary<_, _>
 
 let result = Evaluate.evaluate2_ env None expr
 // ➜ RealVector [20.0; 40.0; 60.0]
+
+SymbolicExpression(expr).ToString()
+SymbolicExpression(expr).Evaluate(env)
+SymbolicExpression.Parse("u.*v").Evaluate(env)
+SymbolicExpression.Parse("u.*v").ToString()
+SymbolicExpression.Parse("(u.*(v + 1)+2) * 2").ToString()
+SymbolicExpression.Parse("(u.*(v + 1)+2) * 2").Evaluate(dict [
+        "u", FloatingPoint.RealVector (vector [10.0; 20.0; 30.0])
+        "v", FloatingPoint.RealVector (vector [10.0; 20.0; 30.0])
+    ])
+
+let expr, cmpl = Compile.compileExpressionOrThrow2 expr [Symbol "u"; Symbol "v"]
+
+printfn "compiled method = %A" cmpl.Method
+printfn "param count = %d" (cmpl.Method.GetParameters().Length)
+
+cmpl.DynamicInvoke([|(env["u"],env["v"])|])
+cmpl.DynamicInvoke([|env["u"];env["v"]|])
+cmpl.DynamicInvoke([| box env["u"]; box env["v"] |])
 
 type FooParam =
 | BoolParam of bool
@@ -276,3 +297,20 @@ let foo (x: FooParam) =
     | StrParam z -> printfn "String: %A" z
 
 foo true
+
+
+
+let mi = typeof<MathNet.Symbolics.Linq.MyOps>.GetMethod("PointwiseMultiply", [|typeof<float[]>;typeof<float[]>|])
+
+let aExpr = Expression.Constant([| 1.0; 2.0 |])
+let bExpr = Expression.Constant([| 3.0; 4.0 |])
+
+let callExpr = Expression.Call(mi, aExpr, bExpr)
+
+let lambda = Expression.Lambda<System.Func<float[]>>(callExpr)
+let compiled = lambda.Compile()
+let result = compiled.Invoke() // 這裡會觸發 orz
+
+
+
+SymbolicExpression.Parse("dup4(7,8)^3").Evaluate(dict ["z", FloatingPoint.Real -8.0])

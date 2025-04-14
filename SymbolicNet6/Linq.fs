@@ -45,6 +45,10 @@ module Linq =
     type MyOps =
         static member PointwiseMultiply(a: float[], b: float[]) =
             Array.map2 (*) a b
+        static member PointwiseMultiply(a: Vector<float>, b: Vector<float>) =
+            a.PointwiseMultiply b
+        static member PointwiseMultiply(a: Value, b: Value) =
+            a.ValueRealVec.PointwiseMultiply b.ValueRealVec |> Value.RealVec
         static member PointwiseMultiply(a: int[], b: int[]) =
             Array.map2 (*) a b
         static member PointwiseMultiply(a: decimal[], b: decimal[]) =
@@ -68,6 +72,7 @@ module Linq =
         | ExpressionType.Call, (:? MethodCallExpression as e) when
             e.Method.Name = "PointwiseMultiply" &&
             e.Method.DeclaringType = typeof<MyOps> ->
+                printfn "OGC"
                 pointwiseMultiply (parse e.Arguments[0]) (parse e.Arguments[1])
         | _ ->
             failwith $"NodeType {q.NodeType} not supported"
@@ -293,9 +298,9 @@ module Linq =
     //    // 呼叫你預先註冊的靜態方法（如 MyOps.PointwiseMultiply）
     //    Expression.Call(typeof<MyOps>.GetMethod("PointwiseMultiply", [| typeof<Vector<float>>; typeof<Vector<float>> |]), a, b)
 
+    let callPointwise x y =
+        Expression.Call(typeof<MyOps>.GetMethod("PointwiseMultiply", [| typeof<Value>; typeof<Value> |]), x, y) :> Expression
     let sharedPointwiseMul (a: Expression) (b: Expression) : Expression =
-        let callPointwise x y =
-            Expression.Call(typeof<MyOps>.GetMethod("PointwiseMultiply", [| typeof<Vector<float>>; typeof<Vector<float>> |]), x, y) :> Expression
 
         match a.NodeType, b.NodeType with
         | ExpressionType.Lambda, ExpressionType.Lambda ->

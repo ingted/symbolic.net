@@ -21,6 +21,7 @@ type VisualExpression =
     | Product of VisualExpression list
     | Fraction of VisualExpression * VisualExpression // a/b
     | Power of VisualExpression * VisualExpression // a^b
+    | PointwiseMul of VisualExpression * VisualExpression
     | Root of VisualExpression * BigInteger // a^(1/b)
     | Function of name:string * power:BigInteger * (VisualExpression list)
     | FunInvocation of name:string * power:BigInteger * (VisualExpression list)
@@ -155,6 +156,10 @@ module VisualExpression =
             | Product (Number n::xs) when n.IsNegative ->
                 VisualExpression.Negative (convert 2 (product ((Number -n)::xs)))
                 |> parenthesis priority 0
+            | PointwiseMul (a, b) ->
+                VisualExpression.PointwiseMul (convert 2 a, convert 2 b)
+                |> parenthesis priority 2
+
             | Product _ as p ->
                 match (numerator p), (denominator p) with
                 | num, One ->
@@ -223,6 +228,7 @@ module VisualExpression =
             | VisualExpression.Product xs -> xs |> List.map convert |> product
             | VisualExpression.Fraction (numerator, denominator) -> (convert numerator)/(convert denominator)
             | VisualExpression.Power (radix, power) -> pow (convert radix) (convert power)
+            | VisualExpression.PointwiseMul (x, y) -> pointwiseMultiply (convert x) (convert y)
             | VisualExpression.Root (radix, power) -> root (fromInteger power) (convert radix)
             | VisualExpression.FunInvocation (fn, power, xs) ->
                 let paramExp = xs |> List.map convert

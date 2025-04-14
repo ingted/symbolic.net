@@ -113,6 +113,7 @@ module private InfixParser =
         opp.AddOperator(InfixOperator("^", ws, 3, Associativity.Right, fun a b -> VisualExpression.Power (a, b)))
         opp.AddOperator(PrefixOperator("+", ws, 4, true, id))
         opp.AddOperator(PrefixOperator("-", ws, 4, true, VisualExpression.Negative))
+        opp.AddOperator(InfixOperator(".*", ws, 2, Associativity.Left, fun a b -> VisualExpression.PointwiseMul(a, b)))
         expr
 
     let parser : VisualExpression parser = ws >>. expression .>> eof
@@ -167,6 +168,10 @@ module private InfixFormatter =
         | VisualExpression.Product (x::xs) ->
             format write x
             xs |> List.iter (fun x -> write "*"; format write x)
+        | VisualExpression.PointwiseMul (a, b) ->
+            format write a
+            write ".*"
+            format write b
         | VisualExpression.Fraction (n, d) ->
             format write n
             write "/"

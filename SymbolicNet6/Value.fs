@@ -29,6 +29,18 @@ type Value =
     | DSTen of Tensor
 #endif
     with
+        member this.ValueRealVec =
+            let (RealVec rv) = this
+            rv
+        member this.ValueComplexVec =
+            let (ComplexVec rv) = this
+            rv
+        member this.ValueRealMat =
+            let (RealMat rv) = this
+            rv
+        member this.ValueComplexMat =
+            let (ComplexMat rv) = this
+            rv
         //001
         static member (+) (vl : Value, vr : Value) =
 #if DEBUG

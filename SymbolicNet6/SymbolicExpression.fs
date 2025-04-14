@@ -41,9 +41,9 @@ type SymbolicExpression(expression:Expression) =
         | Constant I -> SymbolicExpressionType.ComplexNumber
         | Constant _ -> SymbolicExpressionType.RealNumber
         | Sum _ -> SymbolicExpressionType.Sum
-        | Product _ -> SymbolicExpressionType.Product
+        | PointwiseMul _ | Product _ -> SymbolicExpressionType.Product
         | Power _ -> SymbolicExpressionType.Power
-        | Function _ | FunctionN _ -> SymbolicExpressionType.Function
+        | FunInvocation _ | Function _ | FunctionN _ -> SymbolicExpressionType.Function
         | ComplexInfinity -> SymbolicExpressionType.ComplexInfinity
         | PositiveInfinity -> SymbolicExpressionType.PositiveInfinity
         | NegativeInfinity -> SymbolicExpressionType.NegativeInfinity
@@ -284,6 +284,7 @@ type SymbolicExpression(expression:Expression) =
     member this.BesselKRatio(n:SymbolicExpression) = SymbolicExpression(besselkratio n.Expression expression)
     member this.HankelH1(n:SymbolicExpression) = SymbolicExpression(hankelh1 n.Expression expression)
     member this.HankelH2(n:SymbolicExpression) = SymbolicExpression(hankelh2 n.Expression expression)
+    member this.PointwiseMultiply(n:SymbolicExpression) = SymbolicExpression(PointwiseMul(expression, n.Expression))
 
 
     // STRUCTURE
