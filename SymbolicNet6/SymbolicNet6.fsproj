@@ -120,16 +120,16 @@
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net9.0|AnyCPU'">
-      <DefineConstants>$(DefineConstants);TENSOR_SUPPORT</DefineConstants>
+      <DefineConstants>$(DefineConstants);TENSOR_SUPPORT;DTPROC</DefineConstants>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|netstandard2.1|AnyCPU'">
-      <DefineConstants>$(DefineConstants);TENSOR_SUPPORT</DefineConstants>
+      <DefineConstants>$(DefineConstants);TENSOR_SUPPORT;DTPROC</DefineConstants>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net9.0|AnyCPU'">
-      <DefineConstants>$(DefineConstants);TENSOR_SUPPORT</DefineConstants>
+      <DefineConstants>$(DefineConstants);TENSOR_SUPPORT;DTPROC</DefineConstants>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|netstandard2.1|AnyCPU'">
-      <DefineConstants>$(DefineConstants);TENSOR_SUPPORT</DefineConstants>
+      <DefineConstants>$(DefineConstants);TENSOR_SUPPORT;DTPROC</DefineConstants>
     </PropertyGroup>
     <Target Name="PostPackNugetDeployWindowsNoTensorSupport" AfterTargets="Pack" Condition="'$(Configuration)' == 'Release' AND '$(IfTensorSupport)'=='false'">
         <Exec Command="powershell -c &quot;write-host '====== Start Post-Build Event ======'&quot;&#xD;&#xA;powershell .\PostBuildEvent.ps1 FAkka.Mathnet.Symbolic" />
