@@ -50,7 +50,6 @@
         <Compile Include="G:\coldfar_py\sharftrade9\Libs\FAkka.Shared\printf.fs">
             <Link>print/printf.fs</Link>
         </Compile>
-        <None Include="Linq.fs.20250425" />
 
 
         <Compile Include="Symbols.fs" />

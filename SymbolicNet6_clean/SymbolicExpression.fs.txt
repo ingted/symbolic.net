@@ -173,7 +173,6 @@ type SymbolicExpression(expression:Expression) =
     // EVALUATION
 
     member this.Evaluate(symbols:System.Collections.Generic.IDictionary<string, FloatingPoint>) = Evaluate.evaluate symbols expression
-    member this.EvaluateCorrect(symbols:System.Collections.Generic.IDictionary<string, FloatingPoint>) = Evaluate.evaluate_correct symbols expression
 
 
     // COMPILATION
