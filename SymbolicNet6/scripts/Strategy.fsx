@@ -84,10 +84,60 @@ changeIt2 o
 
 open MathNet.Numerics.LinearAlgebra
 
+
+let _ =
+    define "dup00" ([Symbol "x"; Symbol "z"],
+        SymbolicExpression.XParse "x + 11 * z")
+
+let _ =
+    define "dup3" ([Symbol "x"; Symbol "y"],
+        SymbolicExpression.XParse "x + y * dup00(x, y) + z")
+
+let _ =
+    define "dup4" ([Symbol "x"; Symbol "y"],
+        SymbolicExpression.XParse "dup3(x+1,y*2)")
+
+let _ =
+    define "dup31" ([Symbol "x"; Symbol "y"],
+        SymbolicExpression.XParse "x + y * y + z")
+let _ =
+    define "dup41" ([Symbol "x"; Symbol "y"],
+        SymbolicExpression.XParse "dup31(x+1,y*2)")
+
+SymbolicExpression.Parse("dup4(7,8)").EvaluateMode0(dict ["z", FloatingPoint.Real -8.0]) //5889 = 9 + 32 * (8 + 11 * 16) - 8 (不正確，應該等於 2944)
+SymbolicExpression.Parse("dup3(8,16)").EvaluateMode0(dict ["z", FloatingPoint.Real -8.0]) //2944 = 8 + 16 * (8 + 11 * 16) - 8 (正確)
+SymbolicExpression.Parse("dup41(7,8)").EvaluateMode0(dict ["z", FloatingPoint.Real -8.0]) //1025 = 9 + 32 * 32 - 8 (不正確，應該等於 256)
+SymbolicExpression.Parse("dup31(8,16)").EvaluateMode0(dict ["z", FloatingPoint.Real -8.0]) //256 = 8 + 16 * 16 - 8 (正確)
+
+SymbolicExpression.Parse("dup4(7,8)").Evaluate(dict ["z", FloatingPoint.Real -8.0]) 
+SymbolicExpression.Parse("dup3(8,16)").Evaluate(dict ["z", FloatingPoint.Real -8.0]) 
+SymbolicExpression.Parse("dup41(7,8)").Evaluate(dict ["z", FloatingPoint.Real -8.0]) 
+SymbolicExpression.Parse("dup31(8,16)").Evaluate(dict ["z", FloatingPoint.Real -8.0])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 let s_ = seq [1.0; 2.0; 3.0]
 let v_ : Vector<float> = Vector<float>.Build.DenseOfEnumerable(s_)
-
-Infix.parseOrThrow "sum(i, 1, n, i^2)"//不支援
+try
+    Infix.parseOrThrow "sum(i, 1, n, i^2)"//不支援
+    ()
+with
+| exn ->
+    printfn "%s" exn.Message
+(SymbolicExpression.Parse "str(ttc+1)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
 
 SymbolicExpression(Sum([Number<|BigRational.FromInt 1;Number <| BigRational.FromInt 1 ])).Evaluate(dict [])
 LaTeX.format (Sum([Number<|BigRational.FromInt 1;Number <| BigRational.FromInt 1;Number <| BigRational.FromInt 2 ]))
@@ -96,6 +146,8 @@ LaTeX.format (Sum([Number<|BigRational.FromInt 1;Number <| BigRational.FromInt 1
 define "test" ([symV; symW], (v + w) * 2)
 define "test1" ([symV; symW], Infix.parseOrThrow("test(v, w)"))
 define "sum" ([symV; symW; symX], Infix.parseOrThrow(""))
+define "sum" ([symV; symW; symX], v + w + x)
+
 
 LaTeX.format (Infix.parseOrThrow("1 + v"))
 SymbolicExpression(Infix.parseOrThrow("2^test(test(x, -2), 2 * x)")).Evaluate(dict [ "x", FloatingPoint.Real 2.0; ])

@@ -50,6 +50,7 @@ and [<NoComparison>] FloatingPoint =
     | ComplexInf
     | Decimal of decimal
     | Int of int
+    | Str of string
     | WTensor of TensorWrapper
     | Context of ConcurrentDictionary<VarName, FloatingPoint>
     | FC of fCell<string>

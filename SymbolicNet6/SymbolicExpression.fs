@@ -174,6 +174,7 @@ type SymbolicExpression(expression:Expression) =
 
     member this.Evaluate(symbols:System.Collections.Generic.IDictionary<string, FloatingPoint>) = Evaluate.evaluate symbols expression
     member this.EvaluateCorrect(symbols:System.Collections.Generic.IDictionary<string, FloatingPoint>) = Evaluate.evaluate_correct symbols expression
+    member this.EvaluateMode0(symbols:System.Collections.Generic.IDictionary<string, FloatingPoint>) = Evaluate.evaluateMode0 symbols expression
 
 
     // COMPILATION

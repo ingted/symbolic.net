@@ -50,6 +50,7 @@ module Definition =
                    "gtensor", true;
                    "list_of", true; "lo", true;
                    //"htensor", true
+                   "str"    , true
                    ]
 
     let keyWord = dict kwlist
@@ -78,6 +79,7 @@ module Definition =
             , (fun nm -> DTProc l)
             , (fun nm cur_exp -> DTProc l)
         )
+
 
     let defAct fnm f =
         if keyWord.ContainsKey fnm then
