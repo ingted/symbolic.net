@@ -14,15 +14,15 @@ module Definition =
     type ScopedContext = ConcurrentDictionary<string, FloatingPoint>
 
     type AlmightFun =
-        GlobalContext (* 頂層 evaluate2 會共用 GlobalContext *) -> ScopedContext option (* 前一輸出之 context，單一 DTProc 連續多個 DefBody 會共用 ScopedContext *) -> FloatingPoint (*
-        前次輸出
+        GlobalContext (* 頂層 evaluate2 會共用 GlobalContext *) -> ScopedContext (* 前一輸出之 context，單一 DTProc 連續多個 DefBody 會共用 ScopedContext *) -> FloatingPoint option (*
+        前次輸出(第0層為 None)
         --> [錯誤描述] 用來支援 NestedExpr，
         --> [錯誤描述] NestedExpr 的每一個 Expression 都是獨立執行的，
         --> [錯誤描述] 單一一個 NestedExpr 表一個 scope ，
         --> [錯誤描述] FloatingPoint list 的最後一個則必須符合輸出能夠讓下一次輸入吃進去，
         --> [錯誤描述] 也就是 (Symbol list) * DefBody 當中 (p, _, _) 的 p
         --> [錯誤描述] 系統變數則是用於確保 Evalute 須提供特定 系統資料 (如果 evalutate 中沒有輸入則要報錯，上層輸出沒輸出也要報錯)
-        *) -> ScopedContext (* 本次輸出 context *) -> FloatingPoint
+        *) -> (* ScopedContext 本次輸出 context -> //因為 ctx 應該是在Proc 範圍內持續存在，故改為不輸出 *) FloatingPoint
 
     type DefBody =
     | DBExp of Expression list * DefOutput //獨立執行，整個 list 是獨立 ScopedContext，但是 (_, DefOutput) 最後的 OutVar (s list) 是輸出的 scope 內的變數，不存在則從 scope context 取，最末一輸出必須符合下一層 (Symbol list) * DefBody 當中 (p, _) 的 p

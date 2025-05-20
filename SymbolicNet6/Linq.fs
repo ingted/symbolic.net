@@ -18,7 +18,8 @@ open DiffSharp
 open System.Collections.Concurrent
 //open PersistedConcurrentSortedList
 //open Deedle
-
+open System.Runtime.InteropServices
+open System.Runtime.CompilerServices
 
 module TupleHelpers =    
     let inline tp1 (a,_,_) = a
@@ -1245,7 +1246,8 @@ module Evaluate =
         rename expr, newSymbols
 
 
-    [<CompiledName("Evaluate2")>]
+    ///Expression 定義的函數，找不到的參數會優先從 evaluate 傳入的 symbol values 查找
+    [<CompiledName("Evaluate2_with_dict_svv")>]
     let rec evaluate2_with_dict_svv (symbolValues:ConcurrentDictionary<string, FloatingPoint>, sysVarValuesOpt:IDictionary<string, FloatingPoint> option) = function
         | Number n -> Real (float n) |> fnormalize
         | Undefined -> Undef
@@ -1809,6 +1811,8 @@ module Evaluate =
 
                     lastResult
 #endif
+
+#if MANUS
                 | DTProc procList ->
                     // 創建一個新的作用域上下文
                     let procScope = ConcurrentDictionary<string, FloatingPoint>()
@@ -1816,7 +1820,7 @@ module Evaluate =
                     let globalContext = symbolValues // 全局上下文
     
                     // 遞迴處理procList中的每個過程定義
-                    let rec evalProc (procList: ((Symbol list) * DefBody) list) (prevOutput: FloatingPoint) (scopedContext: ConcurrentDictionary<string, FloatingPoint> option) =
+                    let rec evalProc (procList: ((Symbol list) * DefBody) list) (prevOutput: FloatingPoint) (currentScopedContext: ConcurrentDictionary<string, FloatingPoint>) =
                         match procList with
                         | [] -> 
                             // 所有過程處理完畢，返回最後的輸出
@@ -1828,10 +1832,10 @@ module Evaluate =
                                 failwithf "%s parameter length not matched %A <-> %A" parentFxName paramSymbols paramValueExprList
             
                             // 創建新的作用域上下文（如果尚未存在）
-                            let currentScopedContext = 
-                                match scopedContext with
-                                | Some ctx -> ctx
-                                | None -> ConcurrentDictionary<string, FloatingPoint>()
+                            //let currentScopedContext = 
+                            //    match scopedContext with
+                            //    | Some ctx -> ctx
+                            //    | None -> ConcurrentDictionary<string, FloatingPoint>()
             
                             // 評估參數並將其添加到作用域上下文
                             for i = 0 to paramSymbols.Length - 1 do
@@ -1883,7 +1887,7 @@ module Evaluate =
                                     // 執行AlmightFun函數
                                     // 參數：全局上下文、前一個作用域上下文（可選）、前一個輸出、當前作用域上下文
                                     let scopedContextOutput = 
-                                        almightFun globalContext scopedContext prevOutput currentScopedContext
+                                        almightFun globalContext scopedContext (Some prevOutput) currentScopedContext
                     
                                     // 返回函數的輸出
                                     scopedContextOutput
@@ -1894,7 +1898,7 @@ module Evaluate =
                     // 開始處理過程列表，初始輸出為Undef，初始作用域上下文為None
                     let finalOutput = evalProc procList Undef None
                     finalOutput
-
+#endif
                 | DTFunI1toI1 f ->
                     let param_val = cal_param_real_val ()
                     f (int param_val.[0]) |> float |> Real
@@ -1912,7 +1916,6 @@ module Evaluate =
                 | DTFunAction f ->
                     f ()
                     Undef
-    ///Expression 定義的函數，找不到的參數會優先從 evaluate 傳入的 symbol values 查找
 
 
     ///Expression 定義的函數，找不到的參數會優先從呼叫函數 (例如 f 定義中呼叫了 g，則 f 為呼叫函數) 的 stack 中查找，而不是優先使用 evaluate 傳入的 symbol values
@@ -1950,7 +1953,7 @@ module Evaluate =
     *)
     let stackValueProgrammingMode (svv:ConcurrentStack<IDictionary<string, FloatingPoint> option>) =
         //20250426: 這樣會造成外層參數名被內層用到，這樣不對(應該吧)
-        svv.ToArray() |> Array.choose id |> Array.collect (fun d -> d |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray) |> Array.rev |> Map
+        svv.ToArray() |> Array.choose id |> Array.collect (fun d -> d |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray) |> Array.rev |> dict
         //match svv.TryPeek() with
         //| true, Some d ->
         //    d |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray |> Map
@@ -1960,21 +1963,45 @@ module Evaluate =
     let stackValueMathMode (svv:ConcurrentStack<IDictionary<string, FloatingPoint> option>) =
         match svv.TryPeek() with
         | true, Some d ->
-            d |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray |> Map
+            //d |> Seq.map (fun kv -> kv.Key, kv.Value) |> Seq.toArray |> Map
+            d
         | _, _ ->
-            Map []
+            dict []
 
-    type ConcurrentStack<'T> with
-        member this.StackValueMode0 : Map<string, FloatingPoint> =
-            stackValueProgrammingMode (box this :?> ConcurrentStack<IDictionary<string, FloatingPoint> option>)
+    //type ConcurrentStack<'T> with
+    //    member this.StackValueMode0 : Map<string, FloatingPoint> =
+    //        stackValueProgrammingMode (box this :?> ConcurrentStack<IDictionary<string, FloatingPoint> option>)
 
-        member this.StackValueMode1 : Map<string, FloatingPoint> =
-            stackValueMathMode (box this :?> ConcurrentStack<IDictionary<string, FloatingPoint> option>)
+    //    member this.StackValueMode1 : Map<string, FloatingPoint> =
+    //        stackValueMathMode        (box this :?> ConcurrentStack<IDictionary<string, FloatingPoint> option>)
+
+    [<Extension>]
+    type SpecializedStack =
+        [<Extension>]
+        static member StackValueMode0(cs:ConcurrentStack<IDictionary<string, FloatingPoint> option>) =
+            stackValueProgrammingMode cs
+
+        [<Extension>]
+        static member StackValueMode1(cs:ConcurrentStack<IDictionary<string, FloatingPoint> option>) =
+            stackValueMathMode cs
 
 
+    let scope _ = ConcurrentDictionary<string, FloatingPoint>() |> Context //供圖靈機 IO
 
     [<CompiledName("Evaluate2")>]
-    let rec evaluate2 (symbolValues:ConcurrentDictionary<string, FloatingPoint>, sysVarValueStack:ConcurrentStack<IDictionary<string, FloatingPoint> option>, postFun: (unit -> unit) option) = function
+    let rec evaluate2 (
+            symbolValues:ConcurrentDictionary<string, FloatingPoint>
+            , sysVarValueStack:ConcurrentStack<IDictionary<string, FloatingPoint> option>
+            , postFunOpt: (unit -> unit) option) =
+        let getValue s =
+            match sysVarValueStack.StackValueMode1().TryGetValue s with
+                | true, a -> a |> fnormalize
+                | _ ->
+                    match symbolValues.TryGetValue s with
+                    | true, a -> a |> fnormalize
+                    | _ ->
+                        failwithf  "Failed to find symbol %s" s
+        function
         | Number n -> Real (float n) |> fnormalize
         | Undefined -> Undef
         | ComplexInfinity -> ComplexInf
@@ -1992,13 +2019,14 @@ module Evaluate =
                 //    | _ ->
                 //        failwithf  "Failed to find symbol %s" s
                 //else
-                    match sysVarValueStack.StackValueMode1.TryGetValue s with
-                    | true, a -> a |> fnormalize
-                    | _ ->
-                        match symbolValues.TryGetValue s with
-                        | true, a -> a |> fnormalize
-                        | _ ->
-                            failwithf  "Failed to find symbol %s" s
+                getValue s
+                    //match sysVarValueStack.StackValueMode1().TryGetValue s with
+                    //| true, a -> a |> fnormalize
+                    //| _ ->
+                    //    match symbolValues.TryGetValue s with
+                    //    | true, a -> a |> fnormalize
+                    //    | _ ->
+                    //        failwithf  "Failed to find symbol %s" s
         | Argument (Symbol s) -> failwithf  "Cannot evaluate a argument %s" s
         | Sum xs -> xs |> List.map (evaluate2 (symbolValues, sysVarValueStack, None)) |> List.reduce fadd |> fnormalize
         | Product xs ->
@@ -2214,7 +2242,7 @@ module Evaluate =
                     | _ ->
                         failwithf $"omg fnm {parentFxName}!!!"
 
-                match postFun with
+                match postFunOpt with
                 | Some p ->
                     let r = f ()
                     p ()
@@ -2223,7 +2251,7 @@ module Evaluate =
                     f ()
 
             else
-
+                let somePop = Some (sysVarValueStack.TryPop >> ignore)
                 let rec nestedFxHandler
                     (sl: Symbol list) //fxExpr 中 sl 的變數需要
                     (fxExpr: MathNet.Symbolics.Expression)
@@ -2323,12 +2351,12 @@ module Evaluate =
                         | Identifier aSymbol ->
                             symbolValues[aSymbol.SymbolName]
                         | FunInvocation _ ->                       
-                        
-                            evaluate2 (symbolValues, sysVarValueStack, (Some (sysVarValueStack.TryPop >> ignore))) parentFxBody
+                            
+                            evaluate2 (symbolValues, sysVarValueStack, somePop) parentFxBody
                             //evaluate2 (symbolValues, sysVarValueStack, (Some (fun () -> sysVarValueStack.TryPop() |> ignore))) parentFxBody
                         | _ ->
                             let uSL, frv =
-                                nestedFxHandler parentFxParamSymbols parentFxBody symbolValues sysVarValueStack (Some (sysVarValueStack.TryPop >> ignore))
+                                nestedFxHandler parentFxParamSymbols parentFxBody symbolValues sysVarValueStack somePop
                             let rFrv, rUSl = renameSymbols (uSL, frv) //20250413 symbol 名稱統一化後，快取才有意義
 
                             let expr, cmpl = Compile.compileExpressionOrThrow2 rFrv rUSl
@@ -2340,7 +2368,7 @@ module Evaluate =
                                     Array.append param_val (uSL |> List.skip parentFxParamSymbols.Length |> List.map (fun s -> box symbolValues[s.SymbolName]) |> List.toArray)
                                 )
                             obj2FloatPoint rst
-
+#if MINE
                 //| DTProc procList ->
                     //let runOneProc (paramSymbols, defBody, outputSymbols) =
                     //    // 將輸入 Symbol list 轉成對應的 FloatingPoint list
@@ -2403,6 +2431,7 @@ module Evaluate =
                     //    failwith "orz123"
                     //| Choice2Of2 (extraParams, frv) ->
                     //    evaluate2 (symbolValues_, sysVarValues) frv
+#endif
 #if DTPROC_old
                 | DTProc procList ->
                     let procScope _ = ConcurrentDictionary<string, FloatingPoint>() |> Context //供圖靈機 IO
@@ -2560,92 +2589,176 @@ module Evaluate =
 
                     lastResult
 #endif
-#if DTPROC_MANUS
-                | DTProc procList ->
-                    // 創建一個新的作用域上下文
-                    let procScope = ConcurrentDictionary<string, FloatingPoint>()
-                    let psId = System.Guid.NewGuid().ToString()
-                    let globalContext = symbolValues // 全局上下文
-    
-                    // 遞迴處理procList中的每個過程定義
-                    let rec evalProc (procList: ((Symbol list) * DefBody) list) (prevOutput: FloatingPoint) (scopedContext: ConcurrentDictionary<string, FloatingPoint> option) =
-                        match procList with
-                        | [] -> 
-                            // 所有過程處理完畢，返回最後的輸出
-                            prevOutput
-            
-                        | (paramSymbols, defBody) :: restProcs ->
-                            // 檢查參數數量是否匹配
-                            if paramSymbols.Length <> paramValueExprList.Length then
-                                failwithf "%s parameter length not matched %A <-> %A" parentFxName paramSymbols paramValueExprList
-            
-                            // 創建新的作用域上下文（如果尚未存在）
-                            let currentScopedContext = 
-                                match scopedContext with
-                                | Some ctx -> ctx
-                                | None -> ConcurrentDictionary<string, FloatingPoint>()
-            
-                            // 評估參數並將其添加到作用域上下文
-                            for i = 0 to paramSymbols.Length - 1 do
-                                let paramSymbol = paramSymbols.[i]
-                                let paramValue = evaluate2 (globalContext, None) paramValueExprList.[i]
-                                currentScopedContext.[paramSymbol.SymbolName] <- paramValue
-            
-                            // 根據DefBody類型處理
-                            let newOutput = 
-                                match defBody with
-                                | DBExp (exprList, defOutput) ->
-                                    // 評估表達式列表
-                                    let results = 
-                                        exprList 
-                                        |> List.map (fun expr -> evaluate2 (globalContext, Some (currentScopedContext :> IDictionary<string, FloatingPoint>)) expr)
-                    
-                                    // 根據DefOutput類型處理輸出
-                                    match defOutput with
-                                    | OutVar symbols ->
-                                        // 從作用域上下文中獲取指定變數的值
-                                        if symbols.IsEmpty then
-                                            // 如果沒有指定輸出變數，則返回最後一個表達式的結果
-                                            List.last results
+                    | DTProc procList ->
+                        let procId = System.Guid.NewGuid().ToString()
+                        
+                        let rec evalProc
+                            (procList_: ((Symbol list) * DefBody) list)
+                            (prevOutputOpt: FloatingPoint option)
+                            (scopedContextOpt: ConcurrentDictionary<string, FloatingPoint> option)
+                            (paramValueExprListOpt: MathNet.Symbolics.Expression list option (*第0層非空*))
+                            =
+                            match procList_ with
+                            | [] ->
+                                somePop.Value()
+                                // 所有過程處理完畢，返回最後的輸出
+                                prevOutputOpt.Value
+                            | (paramSymbols, defBody) :: restProcList ->
+                                if paramValueExprListOpt.IsSome then
+                                    //頂層函數吃到的表達式傳入
+                                    let paramValueExprList_ = paramValueExprListOpt.Value
+                                    let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation paramSymbols paramValueExprList_
+                                    evaluatedArgsOfParentCall
+                                else
+                                    //第一層 defBody 輸出綁 第二層 paramSymbols
+                                    let input = 
+                                        if paramSymbols.Length > 1 then
+                                            match prevOutputOpt.Value with
+                                            | (NestedList l) ->
+                                                l
+                                            | (NestedExpr l) ->
+                                                failwith "尚未實作輸出為 Expr list 的部分"
+                                            | _ ->
+                                                failwith "輸出輸入不匹配"
+                                        elif paramSymbols.Length = 1 then
+                                            [prevOutputOpt.Value]
                                         else
-                                            // 從作用域上下文中獲取指定變數的值
-                                            let outputValues = 
-                                                symbols 
-                                                |> List.map (fun sym -> 
-                                                    match currentScopedContext.TryGetValue(sym.SymbolName) with
-                                                    | true, value -> value
-                                                    | _ -> failwithf "Output symbol %s not found in scoped context" sym.SymbolName)
-                            
-                                            // 如果只有一個輸出變數，直接返回其值
-                                            if outputValues.Length = 1 then
-                                                outputValues.[0]
-                                            else
-                                                // 否則返回嵌套列表
-                                                NestedList outputValues
+                                            []
+                                        |> fun outFPList ->
+                                            ((paramSymbols |> List.map (fun s -> s.SymbolName)), outFPList)
+                                            ||> List.zip
+                                    input
+                                |> dict
+                                |> Some
+                                |> sysVarValueStack.Push
+                                        
+                                let currentScopedContext = //for this DefBody
+                                    if scopedContextOpt.IsNone then
+                                        scope().ctx
+                                    else
+                                        scopedContextOpt.Value
                     
-                                    | OutFP ->
-                                        // 返回最後一個表達式的結果
-                                        List.last results
-                    
-                                    | OutCtx ->
-                                        // 返回整個作用域上下文
-                                        Context currentScopedContext
-                
-                                | DBFun almightFun ->
-                                    // 執行AlmightFun函數
-                                    // 參數：全局上下文、前一個作用域上下文（可選）、前一個輸出、當前作用域上下文
-                                    let scopedContextOutput = 
-                                        almightFun globalContext scopedContext prevOutput currentScopedContext
-                    
-                                    // 返回函數的輸出
-                                    scopedContextOutput
-            
-                            // 繼續處理剩餘的過程定義
-                            evalProc restProcs newOutput (Some currentScopedContext)
+                                let rst =
+                                    match defBody with
+                                    | DBFun almightFun ->
+                                        let (Context gsc) = symbolValues["global"]
+                                        let sv = almightFun gsc currentScopedContext prevOutputOpt
+                                        currentScopedContext["it"] <- sv
+                                        sv
+                                    | DBExp (exprList, defOut) ->
+                                        let scopedSymbolValues = ConcurrentDictionary<string, FloatingPoint> currentScopedContext
+                                        scopedSymbolValues["global"] <- symbolValues["global"]
+                                        let sv =
+                                            exprList
+                                            |> List.fold (fun s a ->
+                                                let sv = evaluate2 (scopedSymbolValues, sysVarValueStack, None) a
+                                                scopedSymbolValues["it"] <- sv
+                                                sv
+                                            ) Undef
+
+                                        scopedSymbolValues["it"] <- sv
+
+                                        match defOut with
+                                        | OutCtx ->
+                                            Context scopedSymbolValues
+                                        | OutFP ->
+                                            sv
+                                        | OutVar vl ->
+                                            vl |> List.map (fun s -> getValue s.SymbolName) |> NestedList
+
+
+                                evalProc restProcList (Some rst) (Some currentScopedContext) None
+
+                        let finalOutput =
+                                evalProc     procList  None       None                      (Some paramValueExprList)
+                        finalOutput
+#if DTPROC_MANUS        
+//#else
+                    | DTProc procList ->
+                        // 創建一個新的作用域上下文
+                        let procScope = ConcurrentDictionary<string, FloatingPoint>()
+                        let psId = System.Guid.NewGuid().ToString()
+                        let globalContext = symbolValues // 全局上下文
     
-                    // 開始處理過程列表，初始輸出為Undef，初始作用域上下文為None
-                    let finalOutput = evalProc procList Undef None
-                    finalOutput
+                        // 遞迴處理procList中的每個過程定義
+                        let rec evalProc (procList: ((Symbol list) * DefBody) list) (prevOutput: FloatingPoint) (scopedContext: ConcurrentDictionary<string, FloatingPoint> option) =
+                            match procList with
+                            | [] -> 
+                                // 所有過程處理完畢，返回最後的輸出
+                                prevOutput
+            
+                            | (paramSymbols, defBody) :: restProcs ->
+                                // 檢查參數數量是否匹配
+                                if paramSymbols.Length <> paramValueExprList.Length then
+                                    failwithf "%s parameter length not matched %A <-> %A" parentFxName paramSymbols paramValueExprList
+            
+                                // 創建新的作用域上下文（如果尚未存在）
+                                let currentScopedContext = 
+                                    match scopedContext with
+                                    | Some ctx -> ctx
+                                    | None -> ConcurrentDictionary<string, FloatingPoint>()
+            
+                                // 評估參數並將其添加到作用域上下文
+                                for i = 0 to paramSymbols.Length - 1 do
+                                    let paramSymbol = paramSymbols.[i]
+                                    let paramValue = evaluate2 (globalContext, sysVarValueStack, None) paramValueExprList.[i]
+                                    currentScopedContext.[paramSymbol.SymbolName] <- paramValue
+            
+                                // 根據DefBody類型處理
+                                let newOutput = 
+                                    match defBody with
+                                    | DBExp (exprList, defOutput) ->
+                                        // 評估表達式列表
+                                        let results = 
+                                            exprList 
+                                            |> List.map (fun expr -> evaluate2 (globalContext, sysVarValueStack, None) expr)
+                    
+                                        // 根據DefOutput類型處理輸出
+                                        match defOutput with
+                                        | OutVar symbols ->
+                                            // 從作用域上下文中獲取指定變數的值
+                                            if symbols.IsEmpty then
+                                                // 如果沒有指定輸出變數，則返回最後一個表達式的結果
+                                                List.last results
+                                            else
+                                                // 從作用域上下文中獲取指定變數的值
+                                                let outputValues = 
+                                                    symbols 
+                                                    |> List.map (fun sym -> 
+                                                        match currentScopedContext.TryGetValue(sym.SymbolName) with
+                                                        | true, value -> value
+                                                        | _ -> failwithf "Output symbol %s not found in scoped context" sym.SymbolName)
+                            
+                                                // 如果只有一個輸出變數，直接返回其值
+                                                if outputValues.Length = 1 then
+                                                    outputValues.[0]
+                                                else
+                                                    // 否則返回嵌套列表
+                                                    NestedList outputValues
+                    
+                                        | OutFP ->
+                                            // 返回最後一個表達式的結果
+                                            List.last results
+                    
+                                        | OutCtx ->
+                                            // 返回整個作用域上下文
+                                            Context currentScopedContext
+                
+                                    | DBFun almightFun ->
+                                        // 執行AlmightFun函數
+                                        // 參數：全局上下文、前一個作用域上下文（可選）、前一個輸出、當前作用域上下文
+                                        let scopedContextOutput = 
+                                            almightFun globalContext scopedContext prevOutput currentScopedContext
+                    
+                                        // 返回函數的輸出
+                                        scopedContextOutput
+            
+                                // 繼續處理剩餘的過程定義
+                                evalProc restProcs newOutput (Some currentScopedContext)
+    
+                        // 開始處理過程列表，初始輸出為Undef，初始作用域上下文為None
+                        let finalOutput = evalProc procList Undef None
+                        finalOutput
 #endif
                     | DTFunI1toI1 f ->
                         let param_val = cal_param_real_val ()
@@ -2665,20 +2778,24 @@ module Evaluate =
                         f ()
                         Undef
 
-                match postFun with
+                match postFunOpt with
                 | Some p -> p ()
                 | None -> ()
                 r
 
-    let evaluate2_ (symbolValues:ConcurrentDictionary<string, FloatingPoint>) (sysVarValuesOpt:ConcurrentStack<IDictionary<string, FloatingPoint> option>) =
-        evaluate2 (symbolValues, sysVarValuesOpt, None)
+    let evaluate2_
+        (symbolValues:ConcurrentDictionary<string, FloatingPoint>)
+        (sysVarValuesStack:ConcurrentStack<IDictionary<string, FloatingPoint> option>) =
+        evaluate2 (symbolValues, sysVarValuesStack, None)
+
+    
 
     [<CompiledName("Evaluate")>]
-    let rec evaluate (symbols:IDictionary<string, FloatingPoint>) =
-        let sysVarValuesStack = ConcurrentStack<_>()
-        let symbolValues = ConcurrentDictionary<string, FloatingPoint> symbols
-        let globalScope _ = ConcurrentDictionary<string, FloatingPoint>() |> Context //供圖靈機 IO
-        let curGS = symbolValues.GetOrAdd("global", globalScope)
+    let rec evaluate (symbolValues_:IDictionary<string, FloatingPoint>) =
+        let sysVarValuesStack = ConcurrentStack<_>() //最頂層
+        let symbolValues = ConcurrentDictionary<string, FloatingPoint> symbolValues_
+        //let globalScope _ = ConcurrentDictionary<string, FloatingPoint>() |> Context //供圖靈機 IO
+        let curGS = symbolValues.GetOrAdd("global", scope)
         match curGS with
         | Context _ -> ()
         | _ ->
@@ -2724,7 +2841,7 @@ module Evaluate =
                 //    | _ ->
                 //        failwithf  "Failed to find symbol %s" s
                 //else
-                    match sysVarValueStack.StackValueMode0.TryGetValue s with
+                    match sysVarValueStack.StackValueMode0().TryGetValue s with
                     | true, a -> a |> fnormalize
                     | _ ->
                         match symbolValues.TryGetValue s with

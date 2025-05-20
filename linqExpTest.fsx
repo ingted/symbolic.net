@@ -14,6 +14,10 @@ type System.Int32 with
     static member op_Implicit (x:TTC) = x.oorz
 
 
+type OOO = | T | S
+    with
+        static member op_Implicit (x:int) = if x >= 0 then T else S
+
 (*
 //這三個都是錯的
 //123 :?> TTC
@@ -27,7 +31,53 @@ let ttcFromInt (i:TTC) = i.oorz
 
 ttcFromInt 1234
 
+let ttcFromInt2 (i:OOO) = if i = T then 111 else 222
+
+ttcFromInt2 1234
+
+let inline sss (o:int option list) =
+    o
+    |> List.sumBy (fun opt -> if opt.IsSome then opt.Value else 0)
+
+type Microsoft.FSharp.Collections.List<'T>
+    with
+        static member op_Implicit (x:int list) = x |> List.map Some
+
+sss (Microsoft.FSharp.Collections.List<'T>.op_Implicit [1;2;3])
+sss ([1;2;3])
+
 let inline (!>) (x:^a) : ^b = ((^a or ^b) : (static member op_Implicit : ^a -> ^b) x)
+let inline (!!>) (x:^a) : ^b = ((^a or ^b) : (static member i : int) ())
+let inline (!!>) (x:^a) = ((^a or ^b) : (static member i : int) ())
+
+let (!?>)<'a when 'a : (static member i : int)>() : int = 'a.i
+
+
+let inline (!?>)<'a when 'a : (static member i : int) and 'a : comparison>() : int = 'a.i
+let inline (!?>)<'a when 'a : (static member i : int)>() : int = 'a.i
+
+let inline (!?>)< ^a when ^a : (static member i : int) and ^a : comparison>() : int = ^a.i
+let inline (!?>)< ^a when ^a : (static member i : int)>() : int = ^a.i
+
+let inline U< 'a when 'a : (static member i : int)  and 'a : comparison> () : int = 'a.i
+let inline U< 'a when 'a : (static member i : int)> () : int = 'a.i
+
+let inline (!?>)< 'a when 'a : (static member i : int)>() = (^a : (static member i : int) ())
+
+
+
+
+type Foo () =
+    static member i = 42
+
+type FOO = {i:int}
+
+U<Foo>()
+
+(!?>) <Foo> ()
+
+let result = !!> (Unchecked.defaultof<Foo>)
+
 
 let ttc:TTC = !> 123 
 let oorz:int = !> {oorz=123}

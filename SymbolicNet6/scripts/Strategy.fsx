@@ -98,6 +98,10 @@ let _ =
         SymbolicExpression.XParse "dup3(x+1,y*2)")
 
 let _ =
+    define "dup5" ([Symbol "x"; Symbol "y"],
+        SymbolicExpression.XParse "dup4(x,y)+1")
+
+let _ =
     define "dup31" ([Symbol "x"; Symbol "y"],
         SymbolicExpression.XParse "x + y * y + z")
 let _ =
@@ -109,6 +113,7 @@ SymbolicExpression.Parse("dup3(8,16)").EvaluateMode0(dict ["z", FloatingPoint.Re
 SymbolicExpression.Parse("dup41(7,8)").EvaluateMode0(dict ["z", FloatingPoint.Real -8.0]) //1025 = 9 + 32 * 32 - 8 (不正確，應該等於 256)
 SymbolicExpression.Parse("dup31(8,16)").EvaluateMode0(dict ["z", FloatingPoint.Real -8.0]) //256 = 8 + 16 * 16 - 8 (正確)
 
+SymbolicExpression.Parse("dup5(7,8)").Evaluate(dict ["z", FloatingPoint.Real -8.0]) 
 SymbolicExpression.Parse("dup4(7,8)").Evaluate(dict ["z", FloatingPoint.Real -8.0]) 
 SymbolicExpression.Parse("dup3(8,16)").Evaluate(dict ["z", FloatingPoint.Real -8.0]) 
 SymbolicExpression.Parse("dup41(7,8)").Evaluate(dict ["z", FloatingPoint.Real -8.0]) 
