@@ -29,6 +29,7 @@
             <PackagePath>\</PackagePath>
             <Pack>True</Pack>
         </None>
+        <None Include="scripts\test.20250520.fsx" />
         <None Include="scripts\Strategy20250406.fsx" />
         <None Include="scripts\Global.fs" />
         <None Include="scripts\Strategy.fsx" />
