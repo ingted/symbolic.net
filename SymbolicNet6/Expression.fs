@@ -63,7 +63,8 @@ and [<NoComparison>] FloatingPoint =
     | Int of int
     | Str of string
     | WTensor of TensorWrapper
-    | Context of ConcurrentDictionary<VarName, FloatingPoint>
+    | Context of NamedContext
+    | ContextC of ConcurrentDictionary<string, FloatingPoint>
     | FC of fCell<string>
     | Frame of Frame<string, int64>
     | Series of ObjectSeries<int64>
@@ -103,6 +104,9 @@ and [<NoComparison>] FloatingPoint =
     member x.ctx =
         match x with
         | Context c -> c
+    member x.ctxC =
+        match x with
+        | ContextC c -> c
 
     member x.map =
         match x with
@@ -194,10 +198,32 @@ and [<NoComparison>] FloatingPoint =
         | _ ->
             failwithf "FloatingPoint .*. not supported for:\na = %A\nb = %A" a b
 
+and NamedContext = {
+        id:System.Guid
+        ctx:ConcurrentDictionary<string, FloatingPoint>
+    }
+    with
+        static let catalog = ConcurrentDictionary<System.Guid, ConcurrentDictionary<string, FloatingPoint> * System.Guid option> ()
+        static member Catalog = catalog
+        static member New (parentOpt:System.Guid option) =
+            let cd = ConcurrentDictionary<string, FloatingPoint>()
+            let guid =
+#if NET9_0_OR_GREATER
+                    System.Guid.CreateVersion7()
+#else
+                    System.Guid.NewGuid()
+#endif
+            if not <| catalog.TryAdd(guid, (cd, parentOpt)) then
+                failwith $"Invalid guid {guid.ToString()} to add, parent {parentOpt}"
+            {
+                id = guid
+                ctx = cd
+            }
 
-
-and GlobalContext = ConcurrentDictionary<string, FloatingPoint>
-and ScopedContext = ConcurrentDictionary<string, FloatingPoint>
+            
+and GlobalContext = NamedContext
+and ScopedContext = NamedContext option
+and Stack = ConcurrentDictionary<string, FloatingPoint> option
 and AlmightFun =
     GlobalContext (* 頂層 evaluate2 會共用 GlobalContext *) -> ScopedContext (* 單一 DTProc 連續多個 DefBody 會共用 ScopedContext *) -> FloatingPoint option (*
     前次輸出(第0層為 None)
@@ -207,7 +233,7 @@ and AlmightFun =
     --> [錯誤描述] FloatingPoint list 的最後一個則必須符合輸出能夠讓下一次輸入吃進去，
     --> [錯誤描述] 也就是 (Symbol list) * DefBody 當中 (p, _, _) 的 p
     --> [錯誤描述] 系統變數則是用於確保 Evalute 須提供特定 系統資料 (如果 evalutate 中沒有輸入則要報錯，上層輸出沒輸出也要報錯)
-    *) -> ConcurrentStack<ConcurrentDictionary<string, FloatingPoint> option> -> Expression list option -> bool (* if top  execution *) -> FloatingPoint
+    *) -> Stack -> Expression list option -> bool (* if top  execution *) -> FloatingPoint
 
 and DefBody =
 | DBExp of Expression list * DefOutput //獨立執行，整個 list 是獨立 ScopedContext，但是 (_, DefOutput) 最後的 OutVar (s list) 是輸出的 scope 內的變數，不存在則從 scope context 取，最末一輸出必須符合下一層 (Symbol list) * DefBody 當中 (p, _) 的 p

@@ -109,8 +109,10 @@ printfn "%d" x
 
 
 
-
-
+type A = {i:int}
+    with
+        static let a = 123
+        static member aaa = a
 
 
 
