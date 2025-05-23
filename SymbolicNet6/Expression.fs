@@ -10,6 +10,7 @@ open Deedle
 #if TENSOR_SUPPORT
 open DiffSharp
 #endif
+//open System.Numerics
 
 type Cur = decimal //==> evaluate 用 dict 送進去的
 type DefOutput =
@@ -205,8 +206,12 @@ and NamedContext = {
     with
         static let catalog = ConcurrentDictionary<System.Guid, ConcurrentDictionary<string, FloatingPoint> * System.Guid option> ()
         static member Catalog = catalog
-        static member New (parentOpt:System.Guid option) =
-            let cd = ConcurrentDictionary<string, FloatingPoint>()
+        static member New (parentOpt:System.Guid option, cdOpt: ConcurrentDictionary<string, FloatingPoint> option) =
+            let cd =
+                if cdOpt.IsNone then
+                    ConcurrentDictionary<string, FloatingPoint>()
+                else
+                    cdOpt.Value
             let guid =
 #if NET9_0_OR_GREATER
                     System.Guid.CreateVersion7()

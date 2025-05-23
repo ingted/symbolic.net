@@ -1,11 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <IfTensorSupport>true</IfTensorSupport>
+        <IfTensorSupport>false</IfTensorSupport>
     </PropertyGroup>
     <PropertyGroup Condition="'$(IfTensorSupport)'=='true'">
 
-        <TargetFrameworks>net9.0;netstandard2.1</TargetFrameworks>
+        <TargetFrameworks>net9.0;<!--netstandard2.1--></TargetFrameworks>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <OutputType>Exe</OutputType>
 
@@ -13,7 +13,7 @@
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(IfTensorSupport)'=='false'">
-        <TargetFrameworks>net9.0;netstandard2.0</TargetFrameworks>
+        <TargetFrameworks>net9.0;<!--netstandard2.0--></TargetFrameworks>
 
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <OutputType>Exe</OutputType>
@@ -83,11 +83,13 @@
         <Compile Include="Program.fs" />
     </ItemGroup>
 
-    <ItemGroup>
+    <ItemGroup Condition="'$(IfTensorSupport)'=='true'">
         <PackageReference Include="DiffSharp-cpu" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true' AND '$(TargetFramework)' == 'net9.0'" />
         <PackageReference Include="DiffSharp.Backends.Reference" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true'" />
         <PackageReference Include="DiffSharp.Backends.Torch" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true' AND '$(TargetFramework)' == 'net9.0'" />
         <PackageReference Include="DiffSharp.Core" Version="1.0.7" Condition="'$(IfTensorSupport)'=='true'" />
+    </ItemGroup>
+    <ItemGroup>
         <PackageReference Include="FParsec" Version="1.1.1" />
         <PackageReference Include="MathNet.Numerics" Version="6.0.0-beta1" />
         <PackageReference Include="MathNet.Numerics.FSharp" Version="6.0.0-beta1" />
@@ -122,13 +124,13 @@
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|net9.0|AnyCPU'">
-      <DefineConstants>$(DefineConstants);TENSOR_SUPPORT;DTPROC</DefineConstants>
+      <DefineConstants>$(DefineConstants);DTPROC;TENSOR_SUPPORT1</DefineConstants>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Debug|netstandard2.1|AnyCPU'">
       <DefineConstants>$(DefineConstants);TENSOR_SUPPORT;DTPROC</DefineConstants>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|net9.0|AnyCPU'">
-      <DefineConstants>$(DefineConstants);TENSOR_SUPPORT;DTPROC</DefineConstants>
+      <DefineConstants>$(DefineConstants);DTPROC;TENSOR_SUPPORT1</DefineConstants>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Configuration)|$(TargetFramework)|$(Platform)'=='Release|netstandard2.1|AnyCPU'">
       <DefineConstants>$(DefineConstants);TENSOR_SUPPORT;DTPROC</DefineConstants>
