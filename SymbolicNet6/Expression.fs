@@ -61,6 +61,7 @@ and [<NoComparison>] FloatingPoint =
     | NegInf
     | ComplexInf
     | Decimal of decimal
+    | BR of BigRational
     | Int of int
     | Str of string
     | WTensor of TensorWrapper
@@ -71,8 +72,8 @@ and [<NoComparison>] FloatingPoint =
     | Series of ObjectSeries<int64>
     | NestedExpr of Expression list
     | NestedList of FloatingPoint list
-    | NestedMap of ConcurrentDictionary<string, FloatingPoint>
-    | NestedSet of ConcurrentBag<FloatingPoint>
+    | NestedMap of Map<string, FloatingPoint>
+    //| NestedSet of ConcurrentBag<FloatingPoint>
     | FB of bool
     | FD of FunDict
     // Simpler usage in C#
@@ -113,9 +114,9 @@ and [<NoComparison>] FloatingPoint =
         match x with
         | NestedMap c -> c
 
-    member x.set =
-        match x with
-        | NestedSet c -> c
+    //member x.set =
+    //    match x with
+    //    | NestedSet c -> c
 
     member x.list =
         match x with
@@ -201,15 +202,15 @@ and [<NoComparison>] FloatingPoint =
 
 and NamedContext = {
         id:System.Guid
-        ctx:ConcurrentDictionary<string, FloatingPoint>
+        ctx:Map<string, FloatingPoint>
     }
     with
-        static let catalog = ConcurrentDictionary<System.Guid, ConcurrentDictionary<string, FloatingPoint> * System.Guid option> ()
+        static let catalog = ConcurrentDictionary<System.Guid, Map<string, FloatingPoint> * System.Guid option> ()
         static member Catalog = catalog
-        static member New (parentOpt:System.Guid option, cdOpt: ConcurrentDictionary<string, FloatingPoint> option) =
+        static member New (parentOpt:System.Guid option, cdOpt: Map<string, FloatingPoint> option) =
             let cd =
                 if cdOpt.IsNone then
-                    ConcurrentDictionary<string, FloatingPoint>()
+                    Map []
                 else
                     cdOpt.Value
             let guid =
@@ -228,8 +229,8 @@ and NamedContext = {
             
 and GlobalContext = NamedContext
 and ScopedContext = NamedContext option
-and Stack = ConcurrentDictionary<string, FloatingPoint> option
-and SymbolValues = ConcurrentDictionary<string, FloatingPoint>
+and Stack = Map<string, FloatingPoint> option
+and SymbolValues = Map<string, FloatingPoint>
 and AlmightFun =
     GlobalContext (* 頂層 evaluate2 會共用 GlobalContext *) -> ScopedContext (* 單一 DTProc 連續多個 DefBody 會共用 ScopedContext *) -> FloatingPoint option (*
     前次輸出(第0層為 None)

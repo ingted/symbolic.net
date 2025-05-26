@@ -27,6 +27,13 @@ cdInS.TryAdd (456, 789)
 (SymbolicExpression.Parse "(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
 (SymbolicExpression.Parse "str(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
 
+Evaluate.IF_PRECISE <- true
+
+let (BR ff) = (SymbolicExpression.Parse "(a + 1)^(x^(y * 2))").Evaluate(dict ["a", FloatingPoint.Real 2.0; "x", FloatingPoint.Real 3.0; "y", FloatingPoint.Real 4.0;])
+
+let (Number n) = pow 3N (pow 3N 8N)
+
+ff=n
 
 let symV = Symbol "v"
 let symW = Symbol "w"

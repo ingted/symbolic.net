@@ -98,6 +98,9 @@ module Evaluate =
         | PosInf, NegInf -> Undef
         | PosInf, _ | _, PosInf -> PosInf
         | NegInf, _ | _, NegInf -> NegInf
+        | BR x, BR y -> BR (x + y)
+        | BR y, Real x | Real x, BR y -> BR ((BigRational.FromDecimal (decimal x)) + y)
+        | BR x, Complex y | Complex y, BR x -> Complex ((complex (BigRational.ToDouble x) 0.0) + y)
         //| WTensor (DSTensor dt), Real y -> WTensor (DSTensor (dt + y))
 #if TENSOR_SUPPORT
         | Real x, WTensor (DSTensor dt) -> WTensor (DSTensor (x + dt))
@@ -123,10 +126,36 @@ module Evaluate =
             if x < 0.0 then PosInf else if x > 0.0 then NegInf else Undef
         | PosInf, _ | _, PosInf -> PosInf
         | NegInf, _ | _, NegInf -> NegInf
+        | BR x, Real y | Real y, BR x -> BR (x*BigRational.FromDecimal (decimal y))
+        | BR x, Complex y | Complex y, BR x -> Complex ((complex (BigRational.ToDouble x) 0.0) * y)
 #if TENSOR_SUPPORT
         | Real x, WTensor (DSTensor t) -> WTensor (DSTensor (x * t))
 #endif
         | _ -> failwith "not supported"
+
+    let rec Pow (baseValue: BigRational, exponent: BigRational) : BigRational =
+        if exponent.Denominator = BigInteger.One then
+            // 指數為整數，直接快速冪
+            let exp = int exponent.Numerator
+            if exp >= 0 then
+                let rec pow acc b n =
+                    if n = 0 then acc
+                    elif n % 2 = 0 then pow acc (b * b) (n / 2)
+                    else pow (acc * b) (b * b) ((n - 1) / 2)
+                pow BigRational.One baseValue exp
+            else
+                // 負整數次方
+                BigRational.One / (Pow(baseValue, -exponent))
+        else
+            // 有理數次方 → fallback to float，非精確
+            let b = BigRational.ToDouble baseValue
+            let e = BigRational.ToDouble exponent
+            BigRational.FromDecimal (decimal (Math.Pow(b, e)))
+
+    //let baseValue = BigRational.FromInt 8 / BigRational.FromInt 2
+    //let exponent = BigRational.FromInt 1 / BigRational.FromInt 2
+
+    //let result = Pow(baseValue, exponent)
 
     let fpower u v =
         match u, v with
@@ -139,6 +168,11 @@ module Evaluate =
         | ComplexInf, Infinity | Infinity, ComplexInf -> ComplexInf
         | Infinity, PosInf -> ComplexInf
         | Infinity, NegInf -> Real (0.0)
+        | BR x, BR y -> BR (Pow(x, y))  // 假設你有自定義 Pow 方法
+        | BR x, Real y -> BR (Pow(x, BigRational.FromDecimal (decimal y)))
+        | Real x, BR y -> BR (Pow(BigRational.FromDecimal (decimal x), y))
+        | BR x, Complex y -> Complex (Complex.pow y (complex (BigRational.ToDouble x) 0.0))
+        | Complex x, BR y -> Complex (Complex.pow (complex (BigRational.ToDouble y) 0.0) x)
         | _ -> failwith "not supported"
 
     let fapply f u =
@@ -964,14 +998,14 @@ module Evaluate =
                     Undef
 
 
-    [<Extension>]
-    type SpecializedCD =
-        [<Extension>]
-        static member TryAdds (cd:ConcurrentDictionary<string, FloatingPoint>, added: (string * FloatingPoint) seq) =
-            added
-            |> Seq.iter (fun (k, v) ->
-                cd.TryAdd(k, v) |> ignore
-            )
+    //[<Extension>]
+    //type SpecializedCD =
+    //    [<Extension>]
+    //    static member TryAdds (cd:ConcurrentDictionary<string, FloatingPoint>, added: (string * FloatingPoint) seq) =
+    //        added
+    //        |> Seq.iter (fun (k, v) ->
+    //            cd.TryAdd(k, v) |> ignore
+    //        )
 
     let scopeCtxNewC p = NamedContext.New(p, None) |> Context 
     let scopeCtxC p c = NamedContext.New(p, Some c) |> Context
@@ -986,73 +1020,80 @@ module Evaluate =
 #endif
 
     let rec nestedFxHandler
-        (symbolValues_: SymbolValues)
         (sysVarValueStack_:Stack)
         (fd_:FunDict)
         (sid:Guid option)
         (eval: Guid option -> SymbolValues -> Stack -> (MathNet.Symbolics.Expression -> FloatingPoint))
         (sl: Symbol list) //fxExpr 中 sl 的變數需要
+        (symbolValues_: SymbolValues)
         (fxExpr: MathNet.Symbolics.Expression)
-        : (Symbol list) * (MathNet.Symbolics.Expression) =
+        //: (Symbol list) * SymbolValues * (MathNet.Symbolics.Expression) 
+        =
+        let reNestedFxHandle = nestedFxHandler sysVarValueStack_ fd_ sid eval
     
-        let reNestedFxHandle = nestedFxHandler symbolValues_ sysVarValueStack_ fd_ sid eval
-    
-        let exprMap sl_ (exprs:MathNet.Symbolics.Expression list) =
-            exprs
-            |> List.fold (fun (symL, uExprs) expr ->
-                let usl, uExpr = reNestedFxHandle symL expr //symbolValues_ sysVarValueStack_ //None
-                usl, uExprs @ [uExpr]
-            ) (sl_, [])
-    
-        let traverse sl_ expr =
+        let exprMap sl_ svm_ (exprs:MathNet.Symbolics.Expression list)  =
+            let sl_, svm, rtnL = 
+                exprs
+                |> List.fold (fun (symL, svm_, uExprs) expr ->
+                    let usl, svm, uExpr = reNestedFxHandle symL svm_ expr //symbolValues_ sysVarValueStack_ //None
+                    usl, svm, uExpr :: uExprs
+                ) (sl_, svm_, [])
+            sl_, svm, rtnL |> List.rev
+
+        let traverse svm_ sl_ expr =
             match expr with
             | Sum terms ->
-                let updatedSL, uExprs = exprMap sl_ terms
-                updatedSL, Sum uExprs
+                let updatedSL, svm, uExprs = exprMap sl_ svm_ terms
+                updatedSL, svm, Sum uExprs
             | Product terms ->
-                let updatedSL, uExprs = exprMap sl_ terms
-                updatedSL, Product uExprs
+                let updatedSL, svm, uExprs = exprMap sl_ svm_ terms
+                updatedSL, svm, Product uExprs
             | Power (baseExpr, expExpr) ->
-                let updatedSL, uExpr = reNestedFxHandle sl_ baseExpr //None
-                let updatedSL2, uExpExpr = reNestedFxHandle updatedSL expExpr //None
-                updatedSL2, Power (uExpr, uExpExpr)
+                let updatedSL, svm, uExpr = reNestedFxHandle sl_ svm_ baseExpr //None
+                let updatedSL2, svm2, uExpExpr = reNestedFxHandle updatedSL svm expExpr //None
+                updatedSL2, svm2, Power (uExpr, uExpExpr)
             | Function (func, arg) ->
-                let updatedSL, uExpr = reNestedFxHandle sl_ arg //symbolValues_ sysVarValueStack_ //None
-                updatedSL, Function (func, uExpr)
+                let updatedSL, svm, uExpr = reNestedFxHandle sl_ svm_ arg //symbolValues_ sysVarValueStack_ //None
+                updatedSL, svm, Function (func, uExpr)
             | FunctionN (func, args) ->
-                let updatedSL, uExprs = exprMap sl_ args
-                updatedSL, FunctionN (func, uExprs)
+                let updatedSL, svm, uExprs = exprMap sl_ svm_ args
+                updatedSL, svm, FunctionN (func, uExprs)
             | _ ->
-                sl_, expr
+                sl_, svm_, expr
     
         let r = 
             match fxExpr with
             | FunInvocation ((Symbol sb), origParamExp) when fd_.ContainsKey sb ->
-                let evaluatedValue =
+                let sbvL_, evaluatedState =
                     origParamExp
-                    |> List.map (fun param ->
+                    |> List.fold (fun (sbvL, s) param ->
                         let newSymbolName = $"__{sb}_{Guid.NewGuid().ToString()}__"
                         let newSymbol = Symbol newSymbolName
                         let paramValue = eval sid symbolValues_ sysVarValueStack_ param
-                        symbolValues_.TryAdd(newSymbolName, paramValue) |> ignore
-                        Identifier newSymbol
-                    )
+                        let svMap =
+                            sbvL
+                            |> Map.add newSymbolName paramValue
+                        svMap, (Identifier newSymbol)::s
+                    ) (symbolValues_, [])
             
-            
+                let evaluatedValue = evaluatedState |> List.rev
     
                 let newSymbolNameAggRst = $"__{sb}_{Guid.NewGuid().ToString()}__"
                 let newSymbolAggRst = Symbol newSymbolNameAggRst
             
-                let evaluatedFunValue = eval sid symbolValues_ sysVarValueStack_ (FunInvocation ((Symbol sb), evaluatedValue))
-                symbolValues_.TryAdd(newSymbolNameAggRst, evaluatedFunValue) |> ignore
+                let evaluatedFunValue = eval sid sbvL_ sysVarValueStack_ (FunInvocation ((Symbol sb), evaluatedValue))
+                //symbolValues_.TryAdd(newSymbolNameAggRst, evaluatedFunValue) |> ignore
+                let sbvL =
+                    sbvL_ |> Map.add newSymbolNameAggRst evaluatedFunValue
+
                 FAkka.Microsoft.FSharp.Core.LeveledPrintf.frintfn FAkka.Microsoft.FSharp.Core.LeveledPrintf.PRINTLEVEL.PWARN "Dynamic symbol added: %A" newSymbolAggRst
-                sl, Identifier newSymbolAggRst
+                sl, sbvL, Identifier newSymbolAggRst
     
             | FunInvocation _ ->
                 failwith $"Undefined func {fxExpr}"
             
             | _ ->
-                let updatedSL, traversed = traverse sl fxExpr
+                let updatedSL, svm, traversed = traverse symbolValues_ sl fxExpr
                 let allSymbols = ExpressionHelpFun.collectIdentifiers traversed |> Seq.toList
                 allSymbols
                 |> List.except updatedSL
@@ -1060,14 +1101,15 @@ module Evaluate =
                 |> fun u ->
                     //if u.Length > allSymbols.Length then
                     //    FAkka.Microsoft.FSharp.Core.LeveledPrintf.frintfn FAkka.Microsoft.FSharp.Core.LeveledPrintf.PRINTLEVEL.PWARN "Dynamic symbol list occured:\r\nOriginal: %A\r\n Updated: %A" allSymbols u
-                    u, traversed
+                    u, svm, traversed
     
         r
 
 
     [<CompiledName("Evaluate2")>]
     let rec evaluate2 (
-            parentScopeIdOpt: Guid option
+            ifPrecise: bool
+            , parentScopeIdOpt: Guid option
             , gContext: GlobalContext //Evaluation 共享 (user 宣告之變數值)
             , sContext: ScopedContext //DTProc 共享 (user 宣告之變數值)
             , symbolValues:SymbolValues //PassedIn
@@ -1115,21 +1157,56 @@ module Evaluate =
                     | None ->
                         getPassedInSymbolValue s
 
-        let reEvaluate v = evaluate2 (parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack) v
-        let reEvaluate1 sysVarValueStack_ = evaluate2 (parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack_)
-        let reEvaluate2 symbolValues_ sysVarValueStack_ = evaluate2 (parentScopeIdOpt, gContext, sContext, symbolValues_, sysVarValueStack_)
-        let reEvaluate3 parentScopeIdOpt_ symbolValues_ sysVarValueStack_ = evaluate2 (parentScopeIdOpt_, gContext, sContext, symbolValues_, sysVarValueStack_)
+        let sCtxAdd k v (sCtx:ScopedContext) =
+            if sCtx.IsNone then
+                NamedContext.New(None, Map [k, v] |> Some)
+            else
+                ({
+                    sCtx.Value
+                        with
+                            ctx =
+                                sCtx.Value.ctx
+                                |> Map.add k v
+                })
+            |> Some
+
+        let reEvaluate v = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack) v
+        let reEvaluate1 sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack_)
+        let reEvaluate2 symbolValues_ sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues_, sysVarValueStack_)
+        let reEvaluate3 parentScopeIdOpt_ symbolValues_ sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt_, gContext, sContext, symbolValues_, sysVarValueStack_)
+
+        let realV v =
+            if ifPrecise then
+                BR (BigRational.FromDecimal (decimal v))
+            else
+                Real v
 
         function
-        | Number n -> Real (float n) |> fnormalize
+        | Number n ->
+//#if DEBUG
+//            if n > 87878787878787878787N then
+//                printfn "%A" n
+//#endif
+            if ifPrecise then
+                BR n
+            else
+                Real (float n) |> fnormalize
         | Undefined -> Undef
         | ComplexInfinity -> ComplexInf
         | PositiveInfinity -> PosInf
         | NegativeInfinity -> NegInf
-        | Constant E -> Real (Constants.E)
-        | Constant Pi -> Real (Constants.Pi)
+        | Constant E ->
+            //if ifPrecise then
+            //    BR (BigRational.FromDecimal (decimal Constants.E))
+            //else
+            //    Real (Constants.E)
+            realV Constants.E
+        | Constant Pi ->
+            //Real (Constants.Pi)
+            realV Constants.Pi
         | Constant I -> Complex (Complex.onei)
-        | Approximation (Approximation.Real fp) -> Real fp
+        | Approximation (Approximation.Real fp) -> //Real fp
+            realV fp
         | Approximation (Approximation.Complex fp) -> Complex fp
         | Identifier (Symbol s) -> getValue s
         | Argument (Symbol s) -> failwithf  "Cannot evaluate an argument %s" s
@@ -1284,7 +1361,8 @@ module Evaluate =
 
                         let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation parentFxParamSymbols paramValueExprList 0
                         //sysVarValueStack.Push (Some (ConcurrentDictionary<_, _> (dict evaluatedArgsOfParentCall)))
-                        let updatedStack = dict evaluatedArgsOfParentCall |> CD<_, _> |> Some
+                        //let updatedStack = dict evaluatedArgsOfParentCall |> CD<_, _> |> Some
+                        let updatedStack = Map evaluatedArgsOfParentCall |> Some
 
                         match parentFxBody with
                         | Identifier aSymbol ->
@@ -1294,7 +1372,7 @@ module Evaluate =
                             reEvaluate3 sid symbolValues updatedStack parentFxBody
                             //evaluate2 (symbolValues, sysVarValueStack, (Some (fun () -> sysVarValueStack.TryPop() |> ignore))) parentFxBody
                         | _ ->
-                            let uSL, frv = nestedFxHandler symbolValues updatedStack fd sid reEvaluate3 parentFxParamSymbols parentFxBody
+                            let uSL, svm, frv = nestedFxHandler updatedStack fd sid reEvaluate3 parentFxParamSymbols symbolValues parentFxBody
                             let rFrv, rUSl = renameSymbols (uSL, frv) //20250413 symbol 名稱統一化後，快取才有意義
 
                             let expr, cmpl = Compile.compileExpressionOrThrow2 rFrv rUSl
@@ -1303,7 +1381,7 @@ module Evaluate =
                             let rst =
                                 cmpl.DynamicInvoke(
                                     //20250413 symbol 名稱統一化後，取值仍需要用原先的變數名，所以上面的 uSL 不能少
-                                    Array.append param_val (uSL |> List.skip parentFxParamSymbols.Length |> List.map (fun s -> box symbolValues[s.SymbolName]) |> List.toArray)
+                                    Array.append param_val (uSL |> List.skip parentFxParamSymbols.Length |> List.map (fun s -> box svm[s.SymbolName]) |> List.toArray)
                                 )
                             obj2FloatPoint rst
 
@@ -1332,8 +1410,7 @@ module Evaluate =
                                         let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation paramSymbols paramValueExprList_ skip //ifTop
                                         evaluatedArgsOfParentCall
                                         |> Seq.append (seq["stepId", Str (procStepId_.ToString())])
-                                        |> dict
-                                        |> CD<_, _>
+                                        |> Map
                                         |> Some
                                     else
                                         stack
@@ -1370,11 +1447,14 @@ module Evaluate =
                                     match defBody with
                                     | DBFun (almightFun, defOut) ->
                                         let sv = almightFun gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
-                                        if sContext.IsSome then
-                                            sContext.Value.ctx["it"] <- sv
                                         match defOut with
                                         | OutCtx ->
-                                            Context sContext.Value
+                                            if sContext.IsSome then
+                                                //sContext.Value.ctx["it"] <- sv
+                                                (sCtxAdd "it" sv sContext).Value
+                                            else
+                                                sContext.Value
+                                            |> Context
                                         | OutFP ->
                                             sv
                                         | OutVar vl ->
@@ -1383,19 +1463,27 @@ module Evaluate =
                                         //failwith "haven't yet impl"
                                         //let scopedSymbolValues = ConcurrentDictionary<string, FloatingPoint> currentScopedContext
                                         //scopedSymbolValues["global"] <- symbolValues["global"]
-                                        let fp, _, sv, _ =
+                                        let fp, _, sv, _, sCtxOpt =
                                             exprList
-                                            |> List.fold (fun (s, sid_, symbolValues_, updatedStack_) a ->
+                                            |> List.fold (fun (s, sid_, symbolValues_, updatedStack_, scopedContextOpt_) a ->
                                                 let sv = reEvaluate3 sid_ symbolValues_ updatedStack_ a
-                                                scopedContextOpt.Value.ctx["it"] <- sv
-                                                sv, (Some (procStepId())), symbolValues_, updatedStack_
-                                            ) (Undef, None, symbolValues, None)
+                                                //scopedContextOpt.Value.ctx["it"] <- sv
+                                                let sCtxIt = sCtxAdd "it" sv scopedContextOpt_
+                                                    //Some ({
+                                                    //    scopedContextOpt_.Value
+                                                    //        with
+                                                    //            ctx =
+                                                    //                scopedContextOpt_.Value.ctx
+                                                    //                |> Map.add "it" sv
+                                                    //})
+                                                sv, (Some (procStepId())), symbolValues_, updatedStack_, sCtxIt
+                                            ) (Undef, None, symbolValues, None, scopedContextOpt)
 
-                                        scopedContextOpt.Value.ctx["it"] <- fp
+                                        //scopedContextOpt.Value.ctx["it"] <- fp
 
                                         match defOut with
                                         | OutCtx ->
-                                            Context sContext.Value
+                                            Context sCtxOpt.Value
                                         | OutFP ->
                                             fp
                                         | OutVar vl ->
@@ -1429,23 +1517,31 @@ module Evaluate =
                 r
 
     let evaluate2_
+        (ifPrecise:bool)
         (parentScopeIdOpt: Guid option)
         (gContext: GlobalContext) //Evaluation 共享 (user 宣告之變數值)
         (sContext: ScopedContext)
-        (symbolValues:ConcurrentDictionary<string, FloatingPoint>)
+        (symbolValues:Map<string, FloatingPoint>)
         (sysVarValuesStack:Stack) = //ifTop =
-        evaluate2 (parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValuesStack) //, None, ifTop)
+        evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValuesStack) //, None, ifTop)
 
-    
+    let mutable IF_PRECISE = false
 
     [<CompiledName("Evaluate")>]
     let rec evaluate (symbolValues_:IDictionary<string, FloatingPoint>) =
-        let symbolValues = ConcurrentDictionary<string, FloatingPoint> symbolValues_
+        let symbolValues = Map<string, FloatingPoint> (symbolValues_ |> Seq.map (fun kvp -> kvp.Key, kvp.Value))
         //let globalScope _ = ConcurrentDictionary<string, FloatingPoint>() |> Context //供圖靈機 IO
 
         let gCtx = scopeCtxNew None
-        symbolValues.TryAdd("funDict", FD funDict) |> ignore
-        evaluate2 (None, gCtx, None, symbolValues, None)
+        //symbolValues.TryAdd("funDict", FD funDict) |> ignore
+        evaluate2 (
+            IF_PRECISE
+            , None
+            , gCtx
+            , None
+            , symbolValues |> Map.add "funDict" (FD funDict)
+            , None
+            )
         
 
 
