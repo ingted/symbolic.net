@@ -245,14 +245,14 @@ and DefBody =
 | DBExp of Expression list * DefOutput //獨立執行，整個 list 是獨立 ScopedContext，但是 (_, DefOutput) 最後的 OutVar (s list) 是輸出的 scope 內的變數，不存在則從 scope context 取，最末一輸出必須符合下一層 (Symbol list) * DefBody 當中 (p, _) 的 p
                                      //OutCTX 用以表示輸出 Context (按 key 輸入) or NestedExpr (按順序輸入)
                                      //記得，Evaluate 最終全部都是要輸出 FloatingPoint 的
-| DBFun of AlmightFun //對於一般的 DefType 來說，輸出都是單一 FloatingPoint，這邊簽名吃 FloatingPoint list 主要是先判斷 NestedExpr 如果是就吃 list 不是就吃單一 FloatingPoint，這樣寫會方便些，
+| DBFun of AlmightFun * DefOutput //對於一般的 DefType 來說，輸出都是單一 FloatingPoint，這邊簽名吃 FloatingPoint list 主要是先判斷 NestedExpr 如果是就吃 list 不是就吃單一 FloatingPoint，這樣寫會方便些，
                       //輸出是 FloatingPoint list 對於多引數函數方便些，例如 vec(almightFun(xxx))，如果almightFun輸出4位則vec吃到4位
                       //此邏輯在 evaluate2 中支援
                       //另外，global context 於首次 evaluate 時初始化後由 evaluate2 提供
 
 and DefType =
 | DTExp of (Symbol list) * Expression //用表達式表示函數 body，symbol 是表達式中參數名
-| DTProc of ((Symbol list) * DefBody) list //用表達式/F#函數表示函數 body，symbol 是表達式中參數名，系統變數(例如當根位置, context 等等)由 Evaluate 提供
+| DTProc of ((Symbol list) * DefBody) list * skip:int //用表達式/F#函數表示函數 body，symbol 是表達式中參數名，系統變數(例如當根位置, context 等等)由 Evaluate 提供
 | DTFunAction of (unit -> unit)
 | DTFunI1toI1 of (int -> int)
 | DTFunF2toV1 of (float -> float -> Vector<float>)

@@ -1088,11 +1088,32 @@ module Evaluate =
             | _ ->
                 failwithf  "Failed to find symbol %s" s
 
+        let getScopedContextValue s =
+            if sContext.IsNone then
+                None
+            else
+                match sContext.Value.ctx.TryGetValue s with
+                | true, a -> a |> fnormalize |> Some
+                | _ ->
+                    None
+
+        let getGlobalContextValue s =
+            match gContext.ctx.TryGetValue s with
+            | true, a -> a |> fnormalize |> Some
+            | _ ->
+                None
+
         let getValue s =
             match getStackValue s with
             | Some v -> v
             | None ->
-                getPassedInSymbolValue s
+                match getScopedContextValue s with
+                | Some v -> v
+                | None ->
+                    match getGlobalContextValue s with
+                    | Some v -> v
+                    | None ->
+                        getPassedInSymbolValue s
 
         let reEvaluate v = evaluate2 (parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack) v
         let reEvaluate1 sysVarValueStack_ = evaluate2 (parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack_)
@@ -1188,6 +1209,8 @@ module Evaluate =
                     | "str" ->
                         match paramValueExprList[0] with
                         | Identifier (Symbol s) -> Str s
+                        | Number n ->
+                            Str (BigRational.ToDouble(n).ToString())
                         | _ ->
                             failwithf "Invalid str expression! %A" paramValueExprList
                     | "lo"
@@ -1244,10 +1267,11 @@ module Evaluate =
 
 
 
-                let exprsInFuncParamEvaluation (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) =
+                let exprsInFuncParamEvaluation (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) skip =
                     symbols
+                    |> Seq.skip skip
                     |> Seq.mapi (fun i sb ->
-                        sb.SymbolName, reEvaluate exprs[i]
+                        sb.SymbolName, reEvaluate exprs[i + skip]
                     )
 
 
@@ -1257,8 +1281,8 @@ module Evaluate =
                     | DTExp (parentFxParamSymbols, parentFxBody) ->
                         if parentFxParamSymbols.Length <> paramValueExprList.Length then
                             failwithf "%s parameter length not matched %A <-> %A" parentFxName parentFxParamSymbols paramValueExprList
-                         
-                        let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation parentFxParamSymbols paramValueExprList
+
+                        let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation parentFxParamSymbols paramValueExprList 0
                         //sysVarValueStack.Push (Some (ConcurrentDictionary<_, _> (dict evaluatedArgsOfParentCall)))
                         let updatedStack = dict evaluatedArgsOfParentCall |> CD<_, _> |> Some
 
@@ -1283,7 +1307,7 @@ module Evaluate =
                                 )
                             obj2FloatPoint rst
 
-                    | DTProc procList -> //超級重要一點：在 Proc 內部是不會知曉 evaluate 時候的 symbol values 的！(只能是是 param 傳進 expr)
+                    | DTProc (procList, skip) -> //超級重要一點：在 Proc 內部是不會知曉 evaluate 時候的 symbol values 的！(只能是是 param 傳進 expr)
                         let procStepId () = System.Guid.NewGuid()
                         
                         let rec evalProc
@@ -1305,7 +1329,7 @@ module Evaluate =
                                     if paramValueExprListOpt.IsSome then
                                         //頂層函數吃到的表達式傳入
                                         let paramValueExprList_ = paramValueExprListOpt.Value
-                                        let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation paramSymbols paramValueExprList_ //ifTop
+                                        let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation paramSymbols paramValueExprList_ skip //ifTop
                                         evaluatedArgsOfParentCall
                                         |> Seq.append (seq["stepId", Str (procStepId_.ToString())])
                                         |> dict
@@ -1344,11 +1368,17 @@ module Evaluate =
                     
                                 let rst =
                                     match defBody with
-                                    | DBFun almightFun ->
+                                    | DBFun (almightFun, defOut) ->
                                         let sv = almightFun gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
                                         if sContext.IsSome then
                                             sContext.Value.ctx["it"] <- sv
-                                        sv
+                                        match defOut with
+                                        | OutCtx ->
+                                            Context sContext.Value
+                                        | OutFP ->
+                                            sv
+                                        | OutVar vl ->
+                                            vl |> List.map (fun s -> getValue s.SymbolName) |> NestedList
                                     | DBExp (exprList, defOut) ->
                                         //failwith "haven't yet impl"
                                         //let scopedSymbolValues = ConcurrentDictionary<string, FloatingPoint> currentScopedContext

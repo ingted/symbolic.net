@@ -36,8 +36,8 @@ let symZ = Symbol "z"
 
 
 Definition.funDict.TryRemove "let"
-Definition.funDict.TryAdd ("let", (DTProc [
-    [symX; symV], (DBFun (fun g s prevO stx exprs ifTop ->
+Definition.funDict.TryAdd ("let", (DTProc ([
+    [symX; symV], (DBFun ((fun g s prevO stx exprs ifTop ->
         stx.Value.TryGetValue "x" |> printfn "%A"
         exprs.Value[0] |> printfn "exprs[0]: %A"
         exprs.Value[0].Ident.SymbolName |> printfn "exprs.Value[0].Ident.SymbolName: %A"
@@ -51,8 +51,8 @@ Definition.funDict.TryAdd ("let", (DTProc [
         effectIn[exprs.Value[0].Ident.SymbolName] <- stxVal_v
         printfn "stxId: %A" stxVal_v
         Undef
-    ))
-    [symX;], (DBFun (fun g s prevO stx exprs ifTop ->
+    ), OutFP))
+    [symX;], (DBFun ((fun g s prevO stx exprs ifTop ->
         stx.Value.TryGetValue "x" |> printfn "%A"
         exprs.IsNone |> printfn "exprs.IsNone %A"
         printfn $"ifTop: {ifTop}"
@@ -62,22 +62,22 @@ Definition.funDict.TryAdd ("let", (DTProc [
                 g.ctx
             else
                 s.Value.ctx
-        effectIn["ttc"]  |> printfn "ttc: %A"
+        //effectIn["ttc"]  |> printfn "ttc: %A"
         Undef
-    ))
-]))
+    ), OutFP))
+], 1)))
 
 
 Definition.funDict.TryRemove "print"
-Definition.funDict.TryAdd ("print", (DTProc [
-    [symX;], (DBFun (fun g s prevO stx exprs ifTop ->
+Definition.funDict.TryAdd ("print", (DTProc ([
+    [symX;], (DBFun ((fun g s prevO stx exprs ifTop ->
         printfn "%A" (stx.Value.TryGetValue "x" |> snd)
         Undef
-    ))
-]))
+    ), OutFP))
+], 0)))
 
 Definition.funDict.TryRemove "def"
-Definition.funDict.TryAdd ("def", (DTProc [
+Definition.funDict.TryAdd ("def", (DTProc ([
     [symX; symV], (DBFun (fun g s prevO stx exprs ifTop ->
         stx.GetValue "x" |> printfn "%A"
         exprs.Value[0] |> printfn "exprs[0]: %A"
@@ -93,7 +93,7 @@ Definition.funDict.TryAdd ("def", (DTProc [
         Undef
     ))
 
-]))
+], 0)))
 
 
 (*
@@ -105,18 +105,29 @@ let f () =
 f()
 printfn "%d" x
 *)
-(SymbolicExpression.Parse "let(ttc, 789)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
+(SymbolicExpression.Parse "let(ttc, 789)").Evaluate(dict ["ttc1", FloatingPoint.Real 123.0])
 (SymbolicExpression.Parse "print(123)").Evaluate(dict [])
 
 
 Definition.funDict.TryRemove "main"
-Definition.funDict.TryAdd ("main", DTProc [
+Definition.funDict.TryAdd ("main", DTProc ([
     [], (DBExp ([
-        (SymbolicExpression.Parse "let(ttc, 789)").Expression
-        (SymbolicExpression.Parse "print(ttc)").Expression
+        Infix.parseOrThrow "let(ttc, 789)"
+        Infix.parseOrThrow "print(ttc)"
     ], OutVar [Symbol "ttc"]))
-])
-(SymbolicExpression.Parse "main()").Evaluate(dict [])
+], 0))
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+
+Definition.funDict.TryRemove "main"
+Definition.funDict.TryAdd ("main", DTProc ([
+    [], (DBExp ([
+        Infix.parseOrThrow "let(ttc, str(789))"
+        Infix.parseOrThrow "print(ttc)"
+    ], OutVar [Symbol "ttc"]))
+], 0))
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+
+BigRational.ToDouble(BigRational.FromDecimal 789M).ToString();;
 
 (SymbolicExpression.Parse "expr(xxx + yyy, abc)").Evaluate(dict [])
 (SymbolicExpression.Parse "param(xxx, abc)").Evaluate(dict [])
