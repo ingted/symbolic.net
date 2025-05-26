@@ -16,6 +16,14 @@ type Expr = SymbolicExpression
 open Definition
 open Evaluate
 
+type SCD = | S of CD<int, int>
+
+let cdInS = CD<int, int>(dict [123, 456])
+let scd = S cdInS
+
+cdInS.TryAdd (456, 789)
+
+
 (SymbolicExpression.Parse "(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
 (SymbolicExpression.Parse "str(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
 
@@ -30,37 +38,40 @@ let symZ = Symbol "z"
 Definition.funDict.TryRemove "let"
 Definition.funDict.TryAdd ("let", (DTProc [
     [symX; symV], (DBFun (fun g s prevO stx exprs ifTop ->
-        stx.GetValue "x" |> printfn "%A"
+        stx.Value.TryGetValue "x" |> printfn "%A"
         exprs.Value[0] |> printfn "exprs[0]: %A"
         exprs.Value[0].Ident.SymbolName |> printfn "exprs.Value[0].Ident.SymbolName: %A"
         printfn $"ifTop: {ifTop}"
         let effectIn =
             if ifTop then
-                g
+                g.ctx
             else
-                s
-        effectIn[exprs.Value[0].Ident.SymbolName] <- stx.GetValue("v").Value
-        printfn "stxId: %A" (stx.GetValue "stepId")
+                s.Value.ctx
+        let stxVal_v = stx.Value.TryGetValue("v") |> snd
+        effectIn[exprs.Value[0].Ident.SymbolName] <- stxVal_v
+        printfn "stxId: %A" stxVal_v
         Undef
     ))
     [symX;], (DBFun (fun g s prevO stx exprs ifTop ->
-        stx.GetValue "x" |> printfn "%A"
+        stx.Value.TryGetValue "x" |> printfn "%A"
         exprs.IsNone |> printfn "exprs.IsNone %A"
         printfn $"ifTop: {ifTop}"
-        printfn "stxId: %A" (stx.GetValue "stepId")
+        printfn "stxId: %A" (stx.Value.TryGetValue "stepId" |> snd)
         let effectIn =
             if ifTop then
-                g
+                g.ctx
             else
-                s
+                s.Value.ctx
         effectIn["ttc"]  |> printfn "ttc: %A"
         Undef
     ))
 ]))
+
+
 Definition.funDict.TryRemove "print"
 Definition.funDict.TryAdd ("print", (DTProc [
     [symX;], (DBFun (fun g s prevO stx exprs ifTop ->
-        printfn "%A" (stx.GetValue "x").Value
+        printfn "%A" (stx.Value.TryGetValue "x" |> snd)
         Undef
     ))
 ]))
@@ -98,7 +109,14 @@ printfn "%d" x
 (SymbolicExpression.Parse "print(123)").Evaluate(dict [])
 
 
-
+Definition.funDict.TryRemove "main"
+Definition.funDict.TryAdd ("main", DTProc [
+    [], (DBExp ([
+        (SymbolicExpression.Parse "let(ttc, 789)").Expression
+        (SymbolicExpression.Parse "print(ttc)").Expression
+    ], OutVar [Symbol "ttc"]))
+])
+(SymbolicExpression.Parse "main()").Evaluate(dict [])
 
 (SymbolicExpression.Parse "expr(xxx + yyy, abc)").Evaluate(dict [])
 (SymbolicExpression.Parse "param(xxx, abc)").Evaluate(dict [])

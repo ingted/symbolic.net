@@ -229,6 +229,7 @@ and NamedContext = {
 and GlobalContext = NamedContext
 and ScopedContext = NamedContext option
 and Stack = ConcurrentDictionary<string, FloatingPoint> option
+and SymbolValues = ConcurrentDictionary<string, FloatingPoint>
 and AlmightFun =
     GlobalContext (* 頂層 evaluate2 會共用 GlobalContext *) -> ScopedContext (* 單一 DTProc 連續多個 DefBody 會共用 ScopedContext *) -> FloatingPoint option (*
     前次輸出(第0層為 None)
