@@ -1366,7 +1366,8 @@ module Evaluate =
 
                         match parentFxBody with
                         | Identifier aSymbol ->
-                            symbolValues[aSymbol.SymbolName]
+                            //symbolValues[aSymbol.SymbolName]
+                            getValue aSymbol.SymbolName
                         | FunInvocation _ ->                       
                             
                             reEvaluate3 sid symbolValues updatedStack parentFxBody
@@ -1442,42 +1443,68 @@ module Evaluate =
                                     //        //|> scopeCtx parentScopeIdOpt 
                                     //        |> Some
 
+                                let procEnv = {
+                                    gCtx             = gContext
+                                    sCtx             = sContext
+                                    prevOutput       = prevOutputOpt
+                                    stx              = updatedStack
+                                    procParamArgExpr = paramValueExprListOpt
+                                    ifTop            = sysVarValueStack.IsNone
+                                }
                     
                                 let rst =
                                     match defBody with
                                     | DBFun (almightFun, defOut) ->
-                                        let sv = almightFun gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
+                                        let sv = almightFun procEnv //gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
+                                        let sCtx = 
+                                            if sv.sCtx.IsSome then
+                                                sv.sCtx
+                                            else
+                                                NamedContext.New(parentScopeIdOpt, None) |> Some
+
+                                        let svIt = {
+                                            sv
+                                                with
+                                                    sCtx = (sCtxAdd "it" sv.prevOutput.Value sCtx)
+                                        }
                                         match defOut with
                                         | OutCtx ->
-                                            if sContext.IsSome then
-                                                //sContext.Value.ctx["it"] <- sv
-                                                (sCtxAdd "it" sv sContext).Value
-                                            else
-                                                sContext.Value
-                                            |> Context
+                                            svIt, svIt.sCtx.Value |> Context
                                         | OutFP ->
-                                            sv
+                                            svIt, svIt.prevOutput.Value
                                         | OutVar vl ->
-                                            vl |> List.map (fun s -> getValue s.SymbolName) |> NestedList
+                                            svIt, vl |> List.map (fun s -> getValue s.SymbolName) |> NestedList
                                     | DBExp (exprList, defOut) ->
-                                        //failwith "haven't yet impl"
-                                        //let scopedSymbolValues = ConcurrentDictionary<string, FloatingPoint> currentScopedContext
-                                        //scopedSymbolValues["global"] <- symbolValues["global"]
-                                        let fp, _, sv, _, sCtxOpt =
+                                        
+                                        //let fp, _, sv, _, sCtxOpt =
+                                        //    exprList
+                                        //    |> List.fold (fun (s, sid_, symbolValues_, updatedStack_, scopedContextOpt_) a ->
+                                        //        let sv = reEvaluate3 sid_ symbolValues_ updatedStack_ a
+                                        //        //scopedContextOpt.Value.ctx["it"] <- sv
+                                        //        let sCtxIt = sCtxAdd "it" sv scopedContextOpt_
+                                        //            //Some ({
+                                        //            //    scopedContextOpt_.Value
+                                        //            //        with
+                                        //            //            ctx =
+                                        //            //                scopedContextOpt_.Value.ctx
+                                        //            //                |> Map.add "it" sv
+                                        //            //})
+                                        //        sv, (Some (procStepId())), symbolValues_, updatedStack_, sCtxIt
+                                        //    ) (Undef, None, symbolValues, None, scopedContextOpt)
+                                        let rstList, procEnv_, symbolValues_ =
                                             exprList
-                                            |> List.fold (fun (s, sid_, symbolValues_, updatedStack_, scopedContextOpt_) a ->
-                                                let sv = reEvaluate3 sid_ symbolValues_ updatedStack_ a
-                                                //scopedContextOpt.Value.ctx["it"] <- sv
-                                                let sCtxIt = sCtxAdd "it" sv scopedContextOpt_
-                                                    //Some ({
-                                                    //    scopedContextOpt_.Value
-                                                    //        with
-                                                    //            ctx =
-                                                    //                scopedContextOpt_.Value.ctx
-                                                    //                |> Map.add "it" sv
-                                                    //})
-                                                sv, (Some (procStepId())), symbolValues_, updatedStack_, sCtxIt
-                                            ) (Undef, None, symbolValues, None, scopedContextOpt)
+                                            |> List.fold (fun (rstList_, procEnv_, symbolValues_) a ->
+                                                //evaluate2        (ifPrecise, parentScopeIdOpt_, gContext, sContext, symbolValues_, sysVarValueStack_)
+                                                let evalV = evaluate2 (ifPrecise, parentScopeIdOpt, procEnv_.gCtx, procEnv_.sCtx, symbolValues_, procEnv_.stx) a
+
+                                                let updatedProcEnv = {
+                                                    procEnv_
+                                                        with
+                                                            sCtx = (sCtxAdd "it" evalV procEnv_.sCtx)
+                                                }
+
+                                                (procStepId(), evalV)::rstList_, updatedProcEnv, svIt
+                                            ) ([], procEnv, symbolValues)
 
                                         //scopedContextOpt.Value.ctx["it"] <- fp
 
