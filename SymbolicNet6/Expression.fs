@@ -73,7 +73,7 @@ and [<NoComparison>] FloatingPoint =
     | NestedExpr of Expression list
     | NestedList of FloatingPoint list
     | NestedMap of Map<string, FloatingPoint>
-    | ProcRst of ProcEnv * FloatingPoint
+    | EvalRst of ProcEnv * FloatingPoint
     //| NestedSet of ConcurrentBag<FloatingPoint>
     | FB of bool
     | FD of FunDict
@@ -110,6 +110,11 @@ and [<NoComparison>] FloatingPoint =
     member x.ctxC =
         match x with
         | ContextC c -> c
+    member x.eRst =
+        match x with
+        | EvalRst (e, c) -> c
+
+
 
     member x.map =
         match x with
@@ -240,7 +245,7 @@ and ProcEnv = {
     procParamArgExpr    : Expression list option
     ifTop               : bool
 }
-and AlmightFun = ProcEnv -> ProcEnv
+and AlmightFun = ProcEnv -> SymbolValues -> ProcEnv
 and AlmightFunDeprecated =
     GlobalContext (* 頂層 evaluate2 會共用 GlobalContext *) -> ScopedContext (* 單一 DTProc 連續多個 DefBody 會共用 ScopedContext *) -> FloatingPoint option (*
     前次輸出(第0層為 None)

@@ -414,6 +414,613 @@ module Evaluate =
         | _ ->
             failwithf "orz 0006"
 
+
+
+    //[<Extension>]
+    //type SpecializedCD =
+    //    [<Extension>]
+    //    static member TryAdds (cd:ConcurrentDictionary<string, FloatingPoint>, added: (string * FloatingPoint) seq) =
+    //        added
+    //        |> Seq.iter (fun (k, v) ->
+    //            cd.TryAdd(k, v) |> ignore
+    //        )
+
+    let scopeCtxNewC p = NamedContext.New(p, None) |> Context 
+    let scopeCtxC p c = NamedContext.New(p, Some c) |> Context
+    let scopeCtxNew p = NamedContext.New(p, None) //|> Context 
+    let scopeCtx p c = NamedContext.New(p, Some c) //|> Context
+
+    let scopeId () =
+#if NET9_0_OR_GREATER
+        System.Guid.CreateVersion7()
+#else   
+        System.Guid.NewGuid()
+#endif
+
+    let rec nestedFxHandler
+        (sysVarValueStack_:Stack)
+        (fd_:FunDict)
+        (sid:Guid option)
+        (eval: Guid option -> SymbolValues -> Stack -> (MathNet.Symbolics.Expression -> FloatingPoint))
+        (sl: Symbol list) //fxExpr 中 sl 的變數需要
+        (symbolValues_: SymbolValues)
+        (fxExpr: MathNet.Symbolics.Expression)
+        //: (Symbol list) * SymbolValues * (MathNet.Symbolics.Expression) 
+        =
+        let reNestedFxHandle = nestedFxHandler sysVarValueStack_ fd_ sid eval
+    
+        let exprMap sl_ svm_ (exprs:MathNet.Symbolics.Expression list)  =
+            let sl_, svm, rtnL = 
+                exprs
+                |> List.fold (fun (symL, svm_, uExprs) expr ->
+                    let usl, svm, uExpr = reNestedFxHandle symL svm_ expr //symbolValues_ sysVarValueStack_ //None
+                    usl, svm, uExpr :: uExprs
+                ) (sl_, svm_, [])
+            sl_, svm, rtnL |> List.rev
+
+        let traverse svm_ sl_ expr =
+            match expr with
+            | Sum terms ->
+                let updatedSL, svm, uExprs = exprMap sl_ svm_ terms
+                updatedSL, svm, Sum uExprs
+            | Product terms ->
+                let updatedSL, svm, uExprs = exprMap sl_ svm_ terms
+                updatedSL, svm, Product uExprs
+            | Power (baseExpr, expExpr) ->
+                let updatedSL, svm, uExpr = reNestedFxHandle sl_ svm_ baseExpr //None
+                let updatedSL2, svm2, uExpExpr = reNestedFxHandle updatedSL svm expExpr //None
+                updatedSL2, svm2, Power (uExpr, uExpExpr)
+            | Function (func, arg) ->
+                let updatedSL, svm, uExpr = reNestedFxHandle sl_ svm_ arg //symbolValues_ sysVarValueStack_ //None
+                updatedSL, svm, Function (func, uExpr)
+            | FunctionN (func, args) ->
+                let updatedSL, svm, uExprs = exprMap sl_ svm_ args
+                updatedSL, svm, FunctionN (func, uExprs)
+            | _ ->
+                sl_, svm_, expr
+    
+        let r = 
+            match fxExpr with
+            | FunInvocation ((Symbol sb), origParamExp) when fd_.ContainsKey sb ->
+                let sbvL_, evaluatedState =
+                    origParamExp
+                    |> List.fold (fun (sbvL, s) param ->
+                        let newSymbolName = $"__{sb}_{Guid.NewGuid().ToString()}__"
+                        let newSymbol = Symbol newSymbolName
+                        let paramValue = eval sid symbolValues_ sysVarValueStack_ param
+                        let svMap =
+                            sbvL
+                            |> Map.add newSymbolName paramValue.eRst
+                        svMap, (Identifier newSymbol)::s
+                    ) (symbolValues_, [])
+            
+                let evaluatedValue = evaluatedState |> List.rev
+    
+                let newSymbolNameAggRst = $"__{sb}_{Guid.NewGuid().ToString()}__"
+                let newSymbolAggRst = Symbol newSymbolNameAggRst
+            
+                let evaluatedFunValue = eval sid sbvL_ sysVarValueStack_ (FunInvocation ((Symbol sb), evaluatedValue))
+                //symbolValues_.TryAdd(newSymbolNameAggRst, evaluatedFunValue) |> ignore
+                let sbvL =
+                    sbvL_ |> Map.add newSymbolNameAggRst (evaluatedFunValue.eRst)
+
+                FAkka.Microsoft.FSharp.Core.LeveledPrintf.frintfn FAkka.Microsoft.FSharp.Core.LeveledPrintf.PRINTLEVEL.PWARN "Dynamic symbol added: %A" newSymbolAggRst
+                sl, sbvL, Identifier newSymbolAggRst
+    
+            | FunInvocation _ ->
+                failwith $"Undefined func {fxExpr}"
+            
+            | _ ->
+                let updatedSL, svm, traversed = traverse symbolValues_ sl fxExpr
+                let allSymbols = ExpressionHelpFun.collectIdentifiers traversed |> Seq.toList
+                allSymbols
+                |> List.except updatedSL
+                |> List.append updatedSL
+                |> fun u ->
+                    //if u.Length > allSymbols.Length then
+                    //    FAkka.Microsoft.FSharp.Core.LeveledPrintf.frintfn FAkka.Microsoft.FSharp.Core.LeveledPrintf.PRINTLEVEL.PWARN "Dynamic symbol list occured:\r\nOriginal: %A\r\n Updated: %A" allSymbols u
+                    u, svm, traversed
+    
+        r
+
+    let eRst (f:FloatingPoint) = f.eRst
+
+    [<CompiledName("Evaluate2")>]
+    let rec evaluate2 (
+            ifPrecise: bool
+            , parentScopeIdOpt: Guid option
+            //, gContext: GlobalContext //Evaluation 共享 (user 宣告之變數值)
+            //, sContext: ScopedContext //DTProc 共享 (user 宣告之變數值)
+            , symbolValues:SymbolValues //PassedIn
+            //, sysVarValueStack:Stack //參數位置 expr 的 evaluation result -->  SymbolicExpression 參數以及 FuncInvocation 專用
+            //, postFunOpt: (unit -> unit) option
+            , procEnv:ProcEnv
+    ) =
+        //let pop () = sysVarValueStack.TryPop () |> ignore
+        let getStackValue s =
+            //if sysVarValueStack.IsSome then
+            if procEnv.stx.IsSome then
+                match procEnv.stx.Value.TryGetValue s with
+                | true, a -> a |> fnormalize |> Some
+                | _ -> None
+            else
+                None
+        let getPassedInSymbolValue s =
+            match symbolValues.TryGetValue s with
+            | true, a -> a |> fnormalize
+            | _ ->
+                failwithf  "Failed to find symbol %s" s
+
+        let getScopedContextValue s =
+            if procEnv.sCtx.IsNone then
+                None
+            else
+                match procEnv.sCtx.Value.ctx.TryGetValue s with
+                | true, a -> a |> fnormalize |> Some
+                | _ ->
+                    None
+
+        let getGlobalContextValue s =
+            match procEnv.gCtx.ctx.TryGetValue s with
+            | true, a -> a |> fnormalize |> Some
+            | _ ->
+                None
+
+        let getValue s =
+            match getStackValue s with
+            | Some v -> v
+            | None ->
+                match getScopedContextValue s with
+                | Some v -> v
+                | None ->
+                    match getGlobalContextValue s with
+                    | Some v -> v
+                    | None ->
+                        getPassedInSymbolValue s
+
+        let sCtxAdd k v (sCtx:ScopedContext) =
+            if sCtx.IsNone then
+                NamedContext.New(None, Map [k, v] |> Some)
+            else
+                ({
+                    sCtx.Value
+                        with
+                            ctx =
+                                sCtx.Value.ctx
+                                |> Map.add k v
+                })
+            |> Some
+
+        //let reEvaluate v = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack) v
+        //let reEvaluate1 sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack_)
+        //let reEvaluate2 symbolValues_ sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues_, sysVarValueStack_)
+        //let reEvaluate3 parentScopeIdOpt_ symbolValues_ sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt_, gContext, sContext, symbolValues_, sysVarValueStack_)
+
+        let reEvaluate v = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, {procEnv with ifTop = false}) v
+
+        let reRst = reEvaluate >> eRst
+
+        let reEvaluate1 sysVarValueStack_ =
+            let updatedProcEnv = {
+                procEnv
+                    with
+                        stx = sysVarValueStack_
+                        ifTop = false
+            }
+            evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, updatedProcEnv)
+        let reEvaluate2 symbolValues_ sysVarValueStack_ =
+            let updatedProcEnv = {
+                procEnv
+                    with
+                        stx = sysVarValueStack_
+                        ifTop = false
+            }
+            evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues_, updatedProcEnv)
+        let reEvaluate3 parentScopeIdOpt_ symbolValues_ sysVarValueStack_ =
+            let updatedProcEnv = {
+                procEnv
+                    with
+                        stx = sysVarValueStack_
+                        ifTop = false
+            }
+            evaluate2 (ifPrecise, parentScopeIdOpt_, symbolValues_, updatedProcEnv)
+
+
+        let realV v =
+            if ifPrecise then
+                BR (BigRational.FromDecimal (decimal v))
+            else
+                Real v
+
+        let rstIt v = EvalRst (procEnv, v)
+
+        function
+        | Number n ->
+//#if DEBUG
+//            if n > 87878787878787878787N then
+//                printfn "%A" n
+//#endif
+            if ifPrecise then
+                BR n
+            else
+                Real (float n) |> fnormalize
+
+            |> rstIt
+        | Undefined -> rstIt Undef
+        | ComplexInfinity -> rstIt ComplexInf
+        | PositiveInfinity -> rstIt PosInf
+        | NegativeInfinity -> rstIt NegInf
+        | Constant E ->
+            //if ifPrecise then
+            //    BR (BigRational.FromDecimal (decimal Constants.E))
+            //else
+            //    Real (Constants.E)
+            realV Constants.E |> rstIt
+        | Constant Pi ->
+            //Real (Constants.Pi)
+            realV Constants.Pi |> rstIt
+        | Constant I -> Complex (Complex.onei)
+        | Approximation (Approximation.Real fp) -> //Real fp
+            realV fp |> rstIt
+        | Approximation (Approximation.Complex fp) -> Complex fp |> rstIt
+        | Identifier (Symbol s) -> getValue s |> rstIt
+        | Argument (Symbol s) -> failwithf  "Cannot evaluate an argument %s" s
+        | Sum xs -> xs |> List.map reRst |> List.reduce fadd |> fnormalize |> rstIt
+        | Product xs ->
+            let evall = xs |> List.map reRst
+            let reducel = evall |> List.reduce fmultiply
+            reducel |> fnormalize |> rstIt
+        | PointwiseMul (l, r) ->
+                let lv = reRst l
+                let rv = reRst r
+                try
+                    lv .* rv |> rstIt
+                with ex ->
+                    failwithf "PointwiseMul evaluation failed:\nLeft = %A\nRight = %A\nError = %s" lv rv ex.Message
+        | Power (r, p) -> fpower (reRst r) (reRst p) |> fnormalize |> rstIt
+        | Function (f, x) -> fapply f (reRst x) |> fnormalize |> rstIt
+        | FunctionN (f, xs) -> xs |> List.map reRst |> fapplyN f |> fnormalize |> rstIt
+        | FunInvocation (Symbol parentFxName, paramValueExprList) ->
+            let cal_param_fd_val () = paramValueExprList |> List.map reRst
+
+            let cal_param_obj_val () =
+                paramValueExprList
+                |> List.map (reRst >> box)
+                |> List.toArray
+
+            let cal_param_real_val () =
+                paramValueExprList
+                |> List.map (fun paramValueExpr ->
+                    match reRst paramValueExpr with
+                    | (FloatingPoint.Real v) -> v
+                    | (FloatingPoint.Int v) -> float v
+                    | (FloatingPoint.Decimal v) -> float v
+                    | _ -> Double.NaN
+                )
+                |> Array.ofList
+            let cal_param_vec_val () =
+                paramValueExprList
+                |> List.map (fun paramValueExpr ->
+                    match reRst paramValueExpr with
+                    | (RealVector v) -> v
+                    | _ -> failwithf "vector parameter is required for %s" parentFxName
+                )
+                |> Array.ofList
+            let cal_param_mat_vec_val () =
+                paramValueExprList
+                |> List.map (fun paramValueExpr ->
+                    match reRst paramValueExpr with
+                    | (FloatingPoint.RealVector v) -> FloatingPoint.RealVector v
+                    | (FloatingPoint.RealMatrix v) -> FloatingPoint.RealMatrix v
+                    | _ -> failwithf "vector parameter is required for %s" parentFxName
+                )
+                |> Array.ofList
+
+            let cal_param_list_of_vec_val () : TensorWrapper list =
+                paramValueExprList
+                |> List.map (fun paramValueExpr ->
+                    let evalrst = reRst paramValueExpr
+                    match evalrst with
+                    | (FloatingPoint.RealVector v) ->
+                        VecInTensor v //計算結果WTensor                    
+                    | (FloatingPoint.WTensor tw) ->  tw
+                    | _ -> failwithf "vector or WTensor parameter is required for %s" parentFxName
+                )
+
+            if keyWord.ContainsKey parentFxName then
+                let mbr () =
+                    let param_val = cal_param_vec_val ()
+                    let m2 = DenseMatrix.zero<float> (param_val.Length) (param_val.[0].Count)
+                    param_val
+                    |> Array.iteri (fun i v ->
+                        m2.SetRow(i, v)
+                    )
+                    m2
+                let f () =
+                    match parentFxName with
+                    | "str" ->
+                        match paramValueExprList[0] with
+                        | Identifier (Symbol s) -> Str s
+                        | Number n ->
+                            Str (BigRational.ToDouble(n).ToString())
+                        | _ ->
+                            failwithf "Invalid str expression! %A" paramValueExprList
+                    | "lo"
+                    | "list_of" -> //無法知道自己是否是最上層，所以不能回傳 tensor
+                        //htensor(list_of(list_of(list_of(vec(), vec()), list_of(vec(), vec()))))
+                        let param_val = cal_param_list_of_vec_val ()
+                        WTensor <| ListOf param_val
+                        //failwithf "haven't yet implemented"
+                    | "vec" ->
+                        let param_val = cal_param_real_val ()
+                    
+                        RealVector <| vector param_val
+                    | "mat_by_row" ->
+                        RealMatrix (mbr ())
+                    | "mat_by_col" ->
+                        let m2 = mbr()
+                        RealMatrix <| m2.Transpose()
+                    | "htensor" -> //可以知道自己是最上層，回傳 tensor
+#if TENSOR_SUPPORT
+                        let param_val = cal_param_list_of_vec_val ()
+                        if param_val.Length <> 1 then                        
+                            failwithf "htensor only takes single list_of expression as input"
+                        WTensor (DSTensor <| listOf2DSTensor param_val.[0])
+#else
+                        failwithf "Tensor not supported"
+#endif
+                    //| "htensor2" -> //可以知道自己是最上層，回傳 tensor
+                    //    let param_val = cal_param_list_of_vec_val ()
+                    //    if param_val.Length <> 2 then                        
+                    //        failwithf "htensor2 takes 2 list_of expression as input"
+                    //    let v1 = param_val.[0]
+                    //    WTensor (DSTensor <| listOf2DSTensor )
+                    | "gtensor" ->
+                        failwithf "haven't yet implemented"
+                    | "sym_ctensor" ->
+                        failwithf "haven't yet implemented"
+                    | "mat_multiply" ->
+                        let param_val = cal_param_mat_vec_val ()
+                        param_val
+                        |> Array.skip 1
+                        |> Array.fold matmulFoldHandler param_val.[0]
+
+                    | "expr"
+                    | "param" ->
+                        NestedExpr paramValueExprList
+                    | _ ->
+                        failwithf $"omg fnm {parentFxName}!!!"
+                f () |> rstIt
+            else
+
+                let sid = Some (scopeId ())
+                let sCtxFF = scopeCtxNew parentScopeIdOpt 
+                let fd = (getValue "funDict").funDict
+
+
+
+                let exprsInFuncParamEvaluation (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) skip =
+                    symbols
+                    |> Seq.skip skip
+                    |> Seq.mapi (fun i sb ->
+                        sb.SymbolName, reRst exprs[i + skip]
+                    )
+
+
+                let r = 
+                    match fd.[parentFxName] with
+                    //       x1, y1    dup0(paramValueExprList)
+                    | DTExp (parentFxParamSymbols, parentFxBody) ->
+                        if parentFxParamSymbols.Length <> paramValueExprList.Length then
+                            failwithf "%s parameter length not matched %A <-> %A" parentFxName parentFxParamSymbols paramValueExprList
+
+                        let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation parentFxParamSymbols paramValueExprList 0
+                        //sysVarValueStack.Push (Some (ConcurrentDictionary<_, _> (dict evaluatedArgsOfParentCall)))
+                        //let updatedStack = dict evaluatedArgsOfParentCall |> CD<_, _> |> Some
+                        let updatedStack = Map evaluatedArgsOfParentCall |> Some
+
+                        match parentFxBody with
+                        | Identifier aSymbol ->
+                            //symbolValues[aSymbol.SymbolName]
+                            getValue aSymbol.SymbolName
+                        | FunInvocation _ ->                       
+                            
+                            reEvaluate3 sid symbolValues updatedStack parentFxBody
+                            //evaluate2 (symbolValues, sysVarValueStack, (Some (fun () -> sysVarValueStack.TryPop() |> ignore))) parentFxBody
+                        | _ ->
+                            let uSL, svm, frv = nestedFxHandler updatedStack fd sid reEvaluate3 parentFxParamSymbols symbolValues parentFxBody
+                            let rFrv, rUSl = renameSymbols (uSL, frv) //20250413 symbol 名稱統一化後，快取才有意義
+
+                            let expr, cmpl = Compile.compileExpressionOrThrow2 rFrv rUSl
+                            let param_val = cal_param_obj_val ()
+                        
+                            let rst =
+                                cmpl.DynamicInvoke(
+                                    //20250413 symbol 名稱統一化後，取值仍需要用原先的變數名，所以上面的 uSL 不能少
+                                    Array.append param_val (uSL |> List.skip parentFxParamSymbols.Length |> List.map (fun s -> box svm[s.SymbolName]) |> List.toArray)
+                                )
+                            obj2FloatPoint rst |> rstIt
+
+                    | DTProc (procList, skip) -> //超級重要一點：在 Proc 內部是不會知曉 evaluate 時候的 symbol values 的！(只能是是 param 傳進 expr)
+                        let procStepId () = System.Guid.NewGuid()
+                        
+                        let rec evalProc
+                            (procList_: ((Symbol list) * DefBody) list)
+                            //(prevOutputOpt: FloatingPoint option)
+                            (procEnv_:ProcEnv)
+                            //(scopedContextOpt: ScopedContext)
+                            //(stack: Stack) //針對這個函數而言，stack 就是<外部傳入的 param expr list> evaluate後的結果
+                            (paramValueExprListOpt: MathNet.Symbolics.Expression list option (*第0層非空*))
+                            //(ifTopInProc:bool)
+                            (procStepId_:Guid)
+                            =
+                            match procList_ with
+                            | [] ->
+                                //pop()
+                                // 所有過程處理完畢，返回最後的輸出
+                                //prevOutputOpt.Value
+                                procEnv_.prevOutput.Value
+                            | (paramSymbols, defBody) :: restProcList ->
+                                let updatedStack : Stack =
+                                    if paramValueExprListOpt.IsSome then
+                                        //頂層函數吃到的表達式傳入
+                                        let paramValueExprList_ = paramValueExprListOpt.Value
+                                        let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation paramSymbols paramValueExprList_ skip //ifTop
+                                        evaluatedArgsOfParentCall
+                                        |> Seq.append (seq["stepId", Str (procStepId_.ToString())])
+                                        |> Map
+                                        |> Some
+                                    else
+                                        procEnv.stx
+                                        ////第一層 defBody 輸出綁 第二層 paramSymbols
+                                        //let input = 
+                                        //    if paramSymbols.Length > 1 then
+                                        //        match prevOutputOpt.Value with
+                                        //        | (NestedList l) ->
+                                        //            l
+                                        //        | (NestedExpr l) ->
+                                        //            failwith "尚未實作輸出為 Expr list 的部分"
+                                        //        | _ ->
+                                        //            failwith "輸出輸入不匹配"
+                                        //    elif paramSymbols.Length = 1 then
+                                        //        [prevOutputOpt.Value]
+                                        //    else
+                                        //        []
+                                        //    |> fun outFPList ->
+                                        //        ((paramSymbols |> List.map (fun s -> s.SymbolName)), outFPList)
+                                        //        ||> List.zip
+                                        //input
+                                    //|> Seq.append (seq["stepId", Str procStepId_.ToString()])
+                                    //|> fun s ->
+                                    //    //if ifTop then
+                                    //    //    sctx.TryAdds s
+                                    //    //else
+                                    //        dict s
+                                    //        |> ConcurrentDictionary<_, _>
+                                    //        //|> scopeCtx parentScopeIdOpt 
+                                    //        |> Some
+
+                                //let procEnv = {
+                                //    gCtx             = gContext
+                                //    sCtx             = sContext
+                                //    prevOutput       = prevOutputOpt
+                                //    stx              = updatedStack
+                                //    procParamArgExpr = paramValueExprListOpt
+                                //    ifTop            = sysVarValueStack.IsNone
+                                //}
+                    
+                                let rst =
+                                    match defBody with
+                                    | DBFun (almightFun, defOut) ->
+                                        let updatedProcEnv = almightFun procEnv symbolValues //gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
+                                        let sCtx = 
+                                            if updatedProcEnv.sCtx.IsSome then
+                                                updatedProcEnv.sCtx
+                                            else
+                                                NamedContext.New(parentScopeIdOpt, None) |> Some
+
+                                        let updatedProcEnvIt = {
+                                            updatedProcEnv
+                                                with
+                                                    sCtx = (sCtxAdd "it" updatedProcEnv.prevOutput.Value.eRst sCtx)
+                                        }
+                                        match defOut with
+                                        | OutCtx ->
+                                            updatedProcEnvIt, updatedProcEnvIt.sCtx.Value |> Context
+                                        | OutFP ->
+                                            updatedProcEnvIt, updatedProcEnvIt.prevOutput.Value
+                                        | OutVar vl ->
+                                            updatedProcEnvIt, vl |> List.map (fun s -> getValue s.SymbolName) |> NestedList
+                                    | DBExp (exprList, defOut) ->
+                                        let rstList, procEnv_ =
+                                            exprList
+                                            |> List.fold (fun (rstList_, procEnv_) a ->
+                                                //evaluate2        (ifPrecise, parentScopeIdOpt_, gContext, sContext, symbolValues_, sysVarValueStack_)
+                                                let evalV = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, procEnv_) a
+
+                                                let updatedProcEnv = {
+                                                    procEnv_
+                                                        with
+                                                            sCtx = (sCtxAdd "it" evalV.eRst procEnv_.sCtx)
+                                                }
+
+                                                (procStepId(), evalV.eRst)::rstList_, updatedProcEnv
+                                            ) ([], {procEnv with ifTop = false})
+
+                                        //scopedContextOpt.Value.ctx["it"] <- fp
+
+                                        match defOut with
+                                        | OutCtx ->
+                                            procEnv_, procEnv_.sCtx.Value |> Context
+                                        | OutFP ->
+                                            procEnv_, procEnv_.prevOutput.Value
+                                        | OutVar vl ->
+                                            procEnv_, vl |> List.map (fun s -> getValue s.SymbolName) |> NestedList
+
+
+                                evalProc restProcList procEnv_   None                      (procStepId())
+
+                        let finalOutput =
+                                evalProc     procList procEnv   (Some paramValueExprList)   (procStepId())
+                        finalOutput
+                       
+                    | DTFunI1toI1 f ->
+                        let param_val = cal_param_real_val ()
+                        f (int param_val.[0]) |> float |> Real |> rstIt
+                    | DTFunF2toV1 f ->
+                        let param_val = cal_param_real_val ()
+                        f param_val.[0] param_val.[1] |> RealVector |> rstIt
+                    | DTCurF2toV1 (f, (Symbol sym)) ->
+                        let param_val = cal_param_real_val ()
+                        let cur = symbolValues.[sym].DecimalValue
+                        f cur param_val.[0] param_val.[1] |> RealVector |> rstIt
+                    | DTCurF3toV1 (f, (Symbol sym)) ->
+                        let param_val = cal_param_real_val ()
+                        let cur = symbolValues.[sym].DecimalValue
+                        f cur param_val.[0] param_val.[1] param_val.[2] |> RealVector |> rstIt
+                    | DTFunAction f ->
+                        f ()
+                        Undef |> rstIt
+
+                r
+
+    let evaluate2_
+        (ifPrecise:bool)
+        (parentScopeIdOpt: Guid option)
+        //(gContext: GlobalContext) //Evaluation 共享 (user 宣告之變數值)
+        //(sContext: ScopedContext)
+        (symbolValues:Map<string, FloatingPoint>)
+        (procEnv:ProcEnv)
+        //(sysVarValuesStack:Stack)
+        = //ifTop =
+        //evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValuesStack) //, None, ifTop)
+        evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, procEnv) //, None, ifTop)
+
+    let mutable IF_PRECISE = false
+
+    [<CompiledName("Evaluate")>]
+    let rec evaluate (symbolValues_:IDictionary<string, FloatingPoint>) =
+        let symbolValues = Map<string, FloatingPoint> (symbolValues_ |> Seq.map (fun kvp -> kvp.Key, kvp.Value))
+        //let globalScope _ = ConcurrentDictionary<string, FloatingPoint>() |> Context //供圖靈機 IO
+
+        let gCtx = scopeCtxNew None
+        let procEnv = {
+            gCtx                = gCtx
+            sCtx                = None
+            prevOutput          = None
+            stx                 = None
+            procParamArgExpr    = None
+            ifTop               = true
+        }
+        evaluate2 (
+            IF_PRECISE
+            , None
+            //, gCtx
+            //, None
+            , symbolValues |> Map.add "funDict" (FD funDict)
+            , procEnv
+            )
+        
     ///Expression 定義的函數，找不到的參數會優先從 evaluate 傳入的 symbol values 查找
     [<CompiledName("Evaluate2_with_dict_svv")>]
     let rec evaluate2_with_dict_svv (symbolValues:ConcurrentDictionary<string, FloatingPoint>, sysVarValuesOpt:IDictionary<string, FloatingPoint> option) = function
@@ -996,580 +1603,6 @@ module Evaluate =
                 | DTFunAction f ->
                     f ()
                     Undef
-
-
-    //[<Extension>]
-    //type SpecializedCD =
-    //    [<Extension>]
-    //    static member TryAdds (cd:ConcurrentDictionary<string, FloatingPoint>, added: (string * FloatingPoint) seq) =
-    //        added
-    //        |> Seq.iter (fun (k, v) ->
-    //            cd.TryAdd(k, v) |> ignore
-    //        )
-
-    let scopeCtxNewC p = NamedContext.New(p, None) |> Context 
-    let scopeCtxC p c = NamedContext.New(p, Some c) |> Context
-    let scopeCtxNew p = NamedContext.New(p, None) //|> Context 
-    let scopeCtx p c = NamedContext.New(p, Some c) //|> Context
-
-    let scopeId () =
-#if NET9_0_OR_GREATER
-        System.Guid.CreateVersion7()
-#else   
-        System.Guid.NewGuid()
-#endif
-
-    let rec nestedFxHandler
-        (sysVarValueStack_:Stack)
-        (fd_:FunDict)
-        (sid:Guid option)
-        (eval: Guid option -> SymbolValues -> Stack -> (MathNet.Symbolics.Expression -> FloatingPoint))
-        (sl: Symbol list) //fxExpr 中 sl 的變數需要
-        (symbolValues_: SymbolValues)
-        (fxExpr: MathNet.Symbolics.Expression)
-        //: (Symbol list) * SymbolValues * (MathNet.Symbolics.Expression) 
-        =
-        let reNestedFxHandle = nestedFxHandler sysVarValueStack_ fd_ sid eval
-    
-        let exprMap sl_ svm_ (exprs:MathNet.Symbolics.Expression list)  =
-            let sl_, svm, rtnL = 
-                exprs
-                |> List.fold (fun (symL, svm_, uExprs) expr ->
-                    let usl, svm, uExpr = reNestedFxHandle symL svm_ expr //symbolValues_ sysVarValueStack_ //None
-                    usl, svm, uExpr :: uExprs
-                ) (sl_, svm_, [])
-            sl_, svm, rtnL |> List.rev
-
-        let traverse svm_ sl_ expr =
-            match expr with
-            | Sum terms ->
-                let updatedSL, svm, uExprs = exprMap sl_ svm_ terms
-                updatedSL, svm, Sum uExprs
-            | Product terms ->
-                let updatedSL, svm, uExprs = exprMap sl_ svm_ terms
-                updatedSL, svm, Product uExprs
-            | Power (baseExpr, expExpr) ->
-                let updatedSL, svm, uExpr = reNestedFxHandle sl_ svm_ baseExpr //None
-                let updatedSL2, svm2, uExpExpr = reNestedFxHandle updatedSL svm expExpr //None
-                updatedSL2, svm2, Power (uExpr, uExpExpr)
-            | Function (func, arg) ->
-                let updatedSL, svm, uExpr = reNestedFxHandle sl_ svm_ arg //symbolValues_ sysVarValueStack_ //None
-                updatedSL, svm, Function (func, uExpr)
-            | FunctionN (func, args) ->
-                let updatedSL, svm, uExprs = exprMap sl_ svm_ args
-                updatedSL, svm, FunctionN (func, uExprs)
-            | _ ->
-                sl_, svm_, expr
-    
-        let r = 
-            match fxExpr with
-            | FunInvocation ((Symbol sb), origParamExp) when fd_.ContainsKey sb ->
-                let sbvL_, evaluatedState =
-                    origParamExp
-                    |> List.fold (fun (sbvL, s) param ->
-                        let newSymbolName = $"__{sb}_{Guid.NewGuid().ToString()}__"
-                        let newSymbol = Symbol newSymbolName
-                        let paramValue = eval sid symbolValues_ sysVarValueStack_ param
-                        let svMap =
-                            sbvL
-                            |> Map.add newSymbolName paramValue
-                        svMap, (Identifier newSymbol)::s
-                    ) (symbolValues_, [])
-            
-                let evaluatedValue = evaluatedState |> List.rev
-    
-                let newSymbolNameAggRst = $"__{sb}_{Guid.NewGuid().ToString()}__"
-                let newSymbolAggRst = Symbol newSymbolNameAggRst
-            
-                let evaluatedFunValue = eval sid sbvL_ sysVarValueStack_ (FunInvocation ((Symbol sb), evaluatedValue))
-                //symbolValues_.TryAdd(newSymbolNameAggRst, evaluatedFunValue) |> ignore
-                let sbvL =
-                    sbvL_ |> Map.add newSymbolNameAggRst evaluatedFunValue
-
-                FAkka.Microsoft.FSharp.Core.LeveledPrintf.frintfn FAkka.Microsoft.FSharp.Core.LeveledPrintf.PRINTLEVEL.PWARN "Dynamic symbol added: %A" newSymbolAggRst
-                sl, sbvL, Identifier newSymbolAggRst
-    
-            | FunInvocation _ ->
-                failwith $"Undefined func {fxExpr}"
-            
-            | _ ->
-                let updatedSL, svm, traversed = traverse symbolValues_ sl fxExpr
-                let allSymbols = ExpressionHelpFun.collectIdentifiers traversed |> Seq.toList
-                allSymbols
-                |> List.except updatedSL
-                |> List.append updatedSL
-                |> fun u ->
-                    //if u.Length > allSymbols.Length then
-                    //    FAkka.Microsoft.FSharp.Core.LeveledPrintf.frintfn FAkka.Microsoft.FSharp.Core.LeveledPrintf.PRINTLEVEL.PWARN "Dynamic symbol list occured:\r\nOriginal: %A\r\n Updated: %A" allSymbols u
-                    u, svm, traversed
-    
-        r
-
-
-    [<CompiledName("Evaluate2")>]
-    let rec evaluate2 (
-            ifPrecise: bool
-            , parentScopeIdOpt: Guid option
-            , gContext: GlobalContext //Evaluation 共享 (user 宣告之變數值)
-            , sContext: ScopedContext //DTProc 共享 (user 宣告之變數值)
-            , symbolValues:SymbolValues //PassedIn
-            , sysVarValueStack:Stack //參數位置 expr 的 evaluation result -->  SymbolicExpression 參數以及 FuncInvocation 專用
-            //, postFunOpt: (unit -> unit) option
-    ) =
-        //let pop () = sysVarValueStack.TryPop () |> ignore
-        let getStackValue s =
-            if sysVarValueStack.IsSome then
-                match sysVarValueStack.Value.TryGetValue s with
-                | true, a -> a |> fnormalize |> Some
-                | _ -> None
-            else
-                None
-        let getPassedInSymbolValue s =
-            match symbolValues.TryGetValue s with
-            | true, a -> a |> fnormalize
-            | _ ->
-                failwithf  "Failed to find symbol %s" s
-
-        let getScopedContextValue s =
-            if sContext.IsNone then
-                None
-            else
-                match sContext.Value.ctx.TryGetValue s with
-                | true, a -> a |> fnormalize |> Some
-                | _ ->
-                    None
-
-        let getGlobalContextValue s =
-            match gContext.ctx.TryGetValue s with
-            | true, a -> a |> fnormalize |> Some
-            | _ ->
-                None
-
-        let getValue s =
-            match getStackValue s with
-            | Some v -> v
-            | None ->
-                match getScopedContextValue s with
-                | Some v -> v
-                | None ->
-                    match getGlobalContextValue s with
-                    | Some v -> v
-                    | None ->
-                        getPassedInSymbolValue s
-
-        let sCtxAdd k v (sCtx:ScopedContext) =
-            if sCtx.IsNone then
-                NamedContext.New(None, Map [k, v] |> Some)
-            else
-                ({
-                    sCtx.Value
-                        with
-                            ctx =
-                                sCtx.Value.ctx
-                                |> Map.add k v
-                })
-            |> Some
-
-        let reEvaluate v = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack) v
-        let reEvaluate1 sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack_)
-        let reEvaluate2 symbolValues_ sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues_, sysVarValueStack_)
-        let reEvaluate3 parentScopeIdOpt_ symbolValues_ sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt_, gContext, sContext, symbolValues_, sysVarValueStack_)
-
-        let realV v =
-            if ifPrecise then
-                BR (BigRational.FromDecimal (decimal v))
-            else
-                Real v
-
-        function
-        | Number n ->
-//#if DEBUG
-//            if n > 87878787878787878787N then
-//                printfn "%A" n
-//#endif
-            if ifPrecise then
-                BR n
-            else
-                Real (float n) |> fnormalize
-        | Undefined -> Undef
-        | ComplexInfinity -> ComplexInf
-        | PositiveInfinity -> PosInf
-        | NegativeInfinity -> NegInf
-        | Constant E ->
-            //if ifPrecise then
-            //    BR (BigRational.FromDecimal (decimal Constants.E))
-            //else
-            //    Real (Constants.E)
-            realV Constants.E
-        | Constant Pi ->
-            //Real (Constants.Pi)
-            realV Constants.Pi
-        | Constant I -> Complex (Complex.onei)
-        | Approximation (Approximation.Real fp) -> //Real fp
-            realV fp
-        | Approximation (Approximation.Complex fp) -> Complex fp
-        | Identifier (Symbol s) -> getValue s
-        | Argument (Symbol s) -> failwithf  "Cannot evaluate an argument %s" s
-        | Sum xs -> xs |> List.map reEvaluate |> List.reduce fadd |> fnormalize
-        | Product xs ->
-            let evall = xs |> List.map reEvaluate
-            let reducel = evall |> List.reduce fmultiply
-            reducel |> fnormalize
-        | PointwiseMul (l, r) ->
-                let lv = reEvaluate l
-                let rv = reEvaluate r
-                try
-                    lv .* rv
-                with ex ->
-                    failwithf "PointwiseMul evaluation failed:\nLeft = %A\nRight = %A\nError = %s" lv rv ex.Message
-        | Power (r, p) -> fpower (reEvaluate r) (reEvaluate p) |> fnormalize
-        | Function (f, x) -> fapply f (reEvaluate x) |> fnormalize
-        | FunctionN (f, xs) -> xs |> List.map reEvaluate |> fapplyN f |> fnormalize
-        | FunInvocation (Symbol parentFxName, paramValueExprList) ->
-            let cal_param_fd_val () = paramValueExprList |> List.map reEvaluate
-
-            let cal_param_obj_val () =
-                paramValueExprList
-                |> List.map (reEvaluate >> box)
-                |> List.toArray
-
-            let cal_param_real_val () =
-                paramValueExprList
-                |> List.map (fun paramValueExpr ->
-                    match reEvaluate paramValueExpr with
-                    | (FloatingPoint.Real v) -> v
-                    | (FloatingPoint.Int v) -> float v
-                    | (FloatingPoint.Decimal v) -> float v
-                    | _ -> Double.NaN
-                )
-                |> Array.ofList
-            let cal_param_vec_val () =
-                paramValueExprList
-                |> List.map (fun paramValueExpr ->
-                    match reEvaluate paramValueExpr with
-                    | (RealVector v) -> v
-                    | _ -> failwithf "vector parameter is required for %s" parentFxName
-                )
-                |> Array.ofList
-            let cal_param_mat_vec_val () =
-                paramValueExprList
-                |> List.map (fun paramValueExpr ->
-                    match reEvaluate paramValueExpr with
-                    | (FloatingPoint.RealVector v) -> FloatingPoint.RealVector v
-                    | (FloatingPoint.RealMatrix v) -> FloatingPoint.RealMatrix v
-                    | _ -> failwithf "vector parameter is required for %s" parentFxName
-                )
-                |> Array.ofList
-
-            let cal_param_list_of_vec_val () : TensorWrapper list =
-                paramValueExprList
-                |> List.map (fun paramValueExpr ->
-                    let evalrst = reEvaluate paramValueExpr
-                    match evalrst with
-                    | (FloatingPoint.RealVector v) ->
-                        VecInTensor v //計算結果WTensor                    
-                    | (FloatingPoint.WTensor tw) ->  tw
-                    | _ -> failwithf "vector or WTensor parameter is required for %s" parentFxName
-                )
-
-            if keyWord.ContainsKey parentFxName then
-                let mbr () =
-                    let param_val = cal_param_vec_val ()
-                    let m2 = DenseMatrix.zero<float> (param_val.Length) (param_val.[0].Count)
-                    param_val
-                    |> Array.iteri (fun i v ->
-                        m2.SetRow(i, v)
-                    )
-                    m2
-                let f () =
-                    match parentFxName with
-                    | "str" ->
-                        match paramValueExprList[0] with
-                        | Identifier (Symbol s) -> Str s
-                        | Number n ->
-                            Str (BigRational.ToDouble(n).ToString())
-                        | _ ->
-                            failwithf "Invalid str expression! %A" paramValueExprList
-                    | "lo"
-                    | "list_of" -> //無法知道自己是否是最上層，所以不能回傳 tensor
-                        //htensor(list_of(list_of(list_of(vec(), vec()), list_of(vec(), vec()))))
-                        let param_val = cal_param_list_of_vec_val ()
-                        WTensor <| ListOf param_val
-                        //failwithf "haven't yet implemented"
-                    | "vec" ->
-                        let param_val = cal_param_real_val ()
-                    
-                        RealVector <| vector param_val
-                    | "mat_by_row" ->
-                        RealMatrix (mbr ())
-                    | "mat_by_col" ->
-                        let m2 = mbr()
-                        RealMatrix <| m2.Transpose()
-                    | "htensor" -> //可以知道自己是最上層，回傳 tensor
-#if TENSOR_SUPPORT
-                        let param_val = cal_param_list_of_vec_val ()
-                        if param_val.Length <> 1 then                        
-                            failwithf "htensor only takes single list_of expression as input"
-                        WTensor (DSTensor <| listOf2DSTensor param_val.[0])
-#else
-                        failwithf "Tensor not supported"
-#endif
-                    //| "htensor2" -> //可以知道自己是最上層，回傳 tensor
-                    //    let param_val = cal_param_list_of_vec_val ()
-                    //    if param_val.Length <> 2 then                        
-                    //        failwithf "htensor2 takes 2 list_of expression as input"
-                    //    let v1 = param_val.[0]
-                    //    WTensor (DSTensor <| listOf2DSTensor )
-                    | "gtensor" ->
-                        failwithf "haven't yet implemented"
-                    | "sym_ctensor" ->
-                        failwithf "haven't yet implemented"
-                    | "mat_multiply" ->
-                        let param_val = cal_param_mat_vec_val ()
-                        param_val
-                        |> Array.skip 1
-                        |> Array.fold matmulFoldHandler param_val.[0]
-
-                    | "expr"
-                    | "param" ->
-                        NestedExpr paramValueExprList
-                    | _ ->
-                        failwithf $"omg fnm {parentFxName}!!!"
-                f ()
-            else
-
-                let sid = Some (scopeId ())
-                let sCtxFF = scopeCtxNew parentScopeIdOpt 
-                let fd = (getValue "funDict").funDict
-
-
-
-                let exprsInFuncParamEvaluation (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) skip =
-                    symbols
-                    |> Seq.skip skip
-                    |> Seq.mapi (fun i sb ->
-                        sb.SymbolName, reEvaluate exprs[i + skip]
-                    )
-
-
-                let r = 
-                    match fd.[parentFxName] with
-                    //       x1, y1    dup0(paramValueExprList)
-                    | DTExp (parentFxParamSymbols, parentFxBody) ->
-                        if parentFxParamSymbols.Length <> paramValueExprList.Length then
-                            failwithf "%s parameter length not matched %A <-> %A" parentFxName parentFxParamSymbols paramValueExprList
-
-                        let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation parentFxParamSymbols paramValueExprList 0
-                        //sysVarValueStack.Push (Some (ConcurrentDictionary<_, _> (dict evaluatedArgsOfParentCall)))
-                        //let updatedStack = dict evaluatedArgsOfParentCall |> CD<_, _> |> Some
-                        let updatedStack = Map evaluatedArgsOfParentCall |> Some
-
-                        match parentFxBody with
-                        | Identifier aSymbol ->
-                            //symbolValues[aSymbol.SymbolName]
-                            getValue aSymbol.SymbolName
-                        | FunInvocation _ ->                       
-                            
-                            reEvaluate3 sid symbolValues updatedStack parentFxBody
-                            //evaluate2 (symbolValues, sysVarValueStack, (Some (fun () -> sysVarValueStack.TryPop() |> ignore))) parentFxBody
-                        | _ ->
-                            let uSL, svm, frv = nestedFxHandler updatedStack fd sid reEvaluate3 parentFxParamSymbols symbolValues parentFxBody
-                            let rFrv, rUSl = renameSymbols (uSL, frv) //20250413 symbol 名稱統一化後，快取才有意義
-
-                            let expr, cmpl = Compile.compileExpressionOrThrow2 rFrv rUSl
-                            let param_val = cal_param_obj_val ()
-                        
-                            let rst =
-                                cmpl.DynamicInvoke(
-                                    //20250413 symbol 名稱統一化後，取值仍需要用原先的變數名，所以上面的 uSL 不能少
-                                    Array.append param_val (uSL |> List.skip parentFxParamSymbols.Length |> List.map (fun s -> box svm[s.SymbolName]) |> List.toArray)
-                                )
-                            obj2FloatPoint rst
-
-                    | DTProc (procList, skip) -> //超級重要一點：在 Proc 內部是不會知曉 evaluate 時候的 symbol values 的！(只能是是 param 傳進 expr)
-                        let procStepId () = System.Guid.NewGuid()
-                        
-                        let rec evalProc
-                            (procList_: ((Symbol list) * DefBody) list)
-                            (prevOutputOpt: FloatingPoint option)
-                            (scopedContextOpt: ScopedContext)
-                            (stack: Stack) //針對這個函數而言，stack 就是<外部傳入的 param expr list> evaluate後的結果
-                            (paramValueExprListOpt: MathNet.Symbolics.Expression list option (*第0層非空*))
-                            //(ifTopInProc:bool)
-                            (procStepId_:Guid)
-                            =
-                            match procList_ with
-                            | [] ->
-                                //pop()
-                                // 所有過程處理完畢，返回最後的輸出
-                                prevOutputOpt.Value
-                            | (paramSymbols, defBody) :: restProcList ->
-                                let updatedStack : Stack =
-                                    if paramValueExprListOpt.IsSome then
-                                        //頂層函數吃到的表達式傳入
-                                        let paramValueExprList_ = paramValueExprListOpt.Value
-                                        let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation paramSymbols paramValueExprList_ skip //ifTop
-                                        evaluatedArgsOfParentCall
-                                        |> Seq.append (seq["stepId", Str (procStepId_.ToString())])
-                                        |> Map
-                                        |> Some
-                                    else
-                                        stack
-                                        ////第一層 defBody 輸出綁 第二層 paramSymbols
-                                        //let input = 
-                                        //    if paramSymbols.Length > 1 then
-                                        //        match prevOutputOpt.Value with
-                                        //        | (NestedList l) ->
-                                        //            l
-                                        //        | (NestedExpr l) ->
-                                        //            failwith "尚未實作輸出為 Expr list 的部分"
-                                        //        | _ ->
-                                        //            failwith "輸出輸入不匹配"
-                                        //    elif paramSymbols.Length = 1 then
-                                        //        [prevOutputOpt.Value]
-                                        //    else
-                                        //        []
-                                        //    |> fun outFPList ->
-                                        //        ((paramSymbols |> List.map (fun s -> s.SymbolName)), outFPList)
-                                        //        ||> List.zip
-                                        //input
-                                    //|> Seq.append (seq["stepId", Str procStepId_.ToString()])
-                                    //|> fun s ->
-                                    //    //if ifTop then
-                                    //    //    sctx.TryAdds s
-                                    //    //else
-                                    //        dict s
-                                    //        |> ConcurrentDictionary<_, _>
-                                    //        //|> scopeCtx parentScopeIdOpt 
-                                    //        |> Some
-
-                                let procEnv = {
-                                    gCtx             = gContext
-                                    sCtx             = sContext
-                                    prevOutput       = prevOutputOpt
-                                    stx              = updatedStack
-                                    procParamArgExpr = paramValueExprListOpt
-                                    ifTop            = sysVarValueStack.IsNone
-                                }
-                    
-                                let rst =
-                                    match defBody with
-                                    | DBFun (almightFun, defOut) ->
-                                        let sv = almightFun procEnv //gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
-                                        let sCtx = 
-                                            if sv.sCtx.IsSome then
-                                                sv.sCtx
-                                            else
-                                                NamedContext.New(parentScopeIdOpt, None) |> Some
-
-                                        let svIt = {
-                                            sv
-                                                with
-                                                    sCtx = (sCtxAdd "it" sv.prevOutput.Value sCtx)
-                                        }
-                                        match defOut with
-                                        | OutCtx ->
-                                            svIt, svIt.sCtx.Value |> Context
-                                        | OutFP ->
-                                            svIt, svIt.prevOutput.Value
-                                        | OutVar vl ->
-                                            svIt, vl |> List.map (fun s -> getValue s.SymbolName) |> NestedList
-                                    | DBExp (exprList, defOut) ->
-                                        
-                                        //let fp, _, sv, _, sCtxOpt =
-                                        //    exprList
-                                        //    |> List.fold (fun (s, sid_, symbolValues_, updatedStack_, scopedContextOpt_) a ->
-                                        //        let sv = reEvaluate3 sid_ symbolValues_ updatedStack_ a
-                                        //        //scopedContextOpt.Value.ctx["it"] <- sv
-                                        //        let sCtxIt = sCtxAdd "it" sv scopedContextOpt_
-                                        //            //Some ({
-                                        //            //    scopedContextOpt_.Value
-                                        //            //        with
-                                        //            //            ctx =
-                                        //            //                scopedContextOpt_.Value.ctx
-                                        //            //                |> Map.add "it" sv
-                                        //            //})
-                                        //        sv, (Some (procStepId())), symbolValues_, updatedStack_, sCtxIt
-                                        //    ) (Undef, None, symbolValues, None, scopedContextOpt)
-                                        let rstList, procEnv_, symbolValues_ =
-                                            exprList
-                                            |> List.fold (fun (rstList_, procEnv_, symbolValues_) a ->
-                                                //evaluate2        (ifPrecise, parentScopeIdOpt_, gContext, sContext, symbolValues_, sysVarValueStack_)
-                                                let evalV = evaluate2 (ifPrecise, parentScopeIdOpt, procEnv_.gCtx, procEnv_.sCtx, symbolValues_, procEnv_.stx) a
-
-                                                let updatedProcEnv = {
-                                                    procEnv_
-                                                        with
-                                                            sCtx = (sCtxAdd "it" evalV procEnv_.sCtx)
-                                                }
-
-                                                (procStepId(), evalV)::rstList_, updatedProcEnv, svIt
-                                            ) ([], procEnv, symbolValues)
-
-                                        //scopedContextOpt.Value.ctx["it"] <- fp
-
-                                        match defOut with
-                                        | OutCtx ->
-                                            Context sCtxOpt.Value
-                                        | OutFP ->
-                                            fp
-                                        | OutVar vl ->
-                                            vl |> List.map (fun s -> getValue s.SymbolName) |> NestedList
-
-
-                                evalProc restProcList (Some rst) scopedContextOpt updatedStack          None                      (procStepId())
-
-                        let finalOutput =
-                                evalProc     procList  None      (Some sCtxFF)    sysVarValueStack     (Some paramValueExprList)   (procStepId())
-                        finalOutput
-                       
-                    | DTFunI1toI1 f ->
-                        let param_val = cal_param_real_val ()
-                        f (int param_val.[0]) |> float |> Real
-                    | DTFunF2toV1 f ->
-                        let param_val = cal_param_real_val ()
-                        f param_val.[0] param_val.[1] |> RealVector
-                    | DTCurF2toV1 (f, (Symbol sym)) ->
-                        let param_val = cal_param_real_val ()
-                        let cur = symbolValues.[sym].DecimalValue
-                        f cur param_val.[0] param_val.[1] |> RealVector
-                    | DTCurF3toV1 (f, (Symbol sym)) ->
-                        let param_val = cal_param_real_val ()
-                        let cur = symbolValues.[sym].DecimalValue
-                        f cur param_val.[0] param_val.[1] param_val.[2] |> RealVector
-                    | DTFunAction f ->
-                        f ()
-                        Undef
-
-                r
-
-    let evaluate2_
-        (ifPrecise:bool)
-        (parentScopeIdOpt: Guid option)
-        (gContext: GlobalContext) //Evaluation 共享 (user 宣告之變數值)
-        (sContext: ScopedContext)
-        (symbolValues:Map<string, FloatingPoint>)
-        (sysVarValuesStack:Stack) = //ifTop =
-        evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValuesStack) //, None, ifTop)
-
-    let mutable IF_PRECISE = false
-
-    [<CompiledName("Evaluate")>]
-    let rec evaluate (symbolValues_:IDictionary<string, FloatingPoint>) =
-        let symbolValues = Map<string, FloatingPoint> (symbolValues_ |> Seq.map (fun kvp -> kvp.Key, kvp.Value))
-        //let globalScope _ = ConcurrentDictionary<string, FloatingPoint>() |> Context //供圖靈機 IO
-
-        let gCtx = scopeCtxNew None
-        //symbolValues.TryAdd("funDict", FD funDict) |> ignore
-        evaluate2 (
-            IF_PRECISE
-            , None
-            , gCtx
-            , None
-            , symbolValues |> Map.add "funDict" (FD funDict)
-            , None
-            )
-        
 
 
     [<CompiledName("EvaluateCorrect")>]
