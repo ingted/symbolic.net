@@ -41,6 +41,15 @@ type Expression =
         member this.Ident =
             let (Identifier s) = this
             s
+        member this.FunNameOpt =
+            match this with
+            | FunInvocation (n, _) -> Some n
+            | _ -> None
+        member this.int =
+            match this with
+            | Number br -> int br.Numerator
+            | Approximation a -> int a.RealValue
+
 
 and TensorWrapper =
 #if TENSOR_SUPPORT
@@ -112,9 +121,20 @@ and [<NoComparison>] FloatingPoint =
         | ContextC c -> c
     member x.eRst =
         match x with
-        | EvalRst (e, c) -> c
+        | EvalRst (_, r) -> r
 
+    member x.eEnv =
+        match x with
+        | EvalRst (e, _) -> e
 
+    member x.ER =
+        match x with
+        | EvalRst (e, r) -> e, r
+
+    member x.ifEvalRst =
+        match x with
+        | EvalRst _ -> true
+        | _ -> false
 
     member x.map =
         match x with
@@ -243,9 +263,10 @@ and ProcEnv = {
     prevOutput          : FloatingPoint option
     stx                 : Stack
     procParamArgExpr    : Expression list option
-    ifTop               : bool
+    depth               : int
 }
-and AlmightFun = ProcEnv -> SymbolValues -> ProcEnv
+and ParamDefCount = int * int
+and AlmightFun = System.Guid option -> ProcEnv -> SymbolValues -> Expression list option -> ProcEnv
 and AlmightFunDeprecated =
     GlobalContext (* 頂層 evaluate2 會共用 GlobalContext *) -> ScopedContext (* 單一 DTProc 連續多個 DefBody 會共用 ScopedContext *) -> FloatingPoint option (*
     前次輸出(第0層為 None)
@@ -268,7 +289,7 @@ and DefBody =
 
 and DefType =
 | DTExp of (Symbol list) * Expression //用表達式表示函數 body，symbol 是表達式中參數名
-| DTProc of ((Symbol list) * DefBody) list * skip:int //用表達式/F#函數表示函數 body，symbol 是表達式中參數名，系統變數(例如當根位置, context 等等)由 Evaluate 提供
+| DTProc of ((Symbol list) * DefBody) list * skip:int * ParamDefCount option //用表達式/F#函數表示函數 body，symbol 是表達式中參數名，系統變數(例如當根位置, context 等等)由 Evaluate 提供
 | DTFunAction of (unit -> unit)
 | DTFunI1toI1 of (int -> int)
 | DTFunF2toV1 of (float -> float -> Vector<float>)

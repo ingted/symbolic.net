@@ -51,8 +51,8 @@ module Evaluate =
                    |> List.ofArray
                 )
             vl |> Array.ofList, ss
-        | _ ->
-            failwithf "listOf2Obj orz"
+        //| _ ->
+        //    failwithf "listOf2Obj orz"
 
     let listOf2DSTensor (wt0:TensorWrapper) =
 #if TENSOR_SUPPORT
@@ -525,6 +525,29 @@ module Evaluate =
 
     let eRst (f:FloatingPoint) = f.eRst
 
+    let sCtxAdd k v (sCtx:ScopedContext) =
+        if sCtx.IsNone then
+            NamedContext.New(None, Map [k, v] |> Some)
+        else
+            ({
+                sCtx.Value
+                    with
+                        ctx =
+                            sCtx.Value.ctx
+                            |> Map.add k v
+            })
+        |> Some
+
+    let gCtxAdd k v (gCtx:GlobalContext) =
+            {
+                gCtx
+                    with
+                        ctx =
+                            gCtx.ctx
+                            |> Map.add k v
+            }
+
+
     [<CompiledName("Evaluate2")>]
     let rec evaluate2 (
             ifPrecise: bool
@@ -535,69 +558,61 @@ module Evaluate =
             //, sysVarValueStack:Stack //參數位置 expr 的 evaluation result -->  SymbolicExpression 參數以及 FuncInvocation 專用
             //, postFunOpt: (unit -> unit) option
             , procEnv:ProcEnv
+            //, ifTop: bool
     ) =
-        //let pop () = sysVarValueStack.TryPop () |> ignore
-        let getStackValue s =
-            //if sysVarValueStack.IsSome then
-            if procEnv.stx.IsSome then
-                match procEnv.stx.Value.TryGetValue s with
-                | true, a -> a |> fnormalize |> Some
-                | _ -> None
-            else
-                None
         let getPassedInSymbolValue s =
             match symbolValues.TryGetValue s with
             | true, a -> a |> fnormalize
             | _ ->
                 failwithf  "Failed to find symbol %s" s
 
-        let getScopedContextValue s =
-            if procEnv.sCtx.IsNone then
+        let inline getStackValue (procEnv_:ProcEnv) s  =
+            //if sysVarValueStack.IsSome then
+            if procEnv_.stx.IsSome then
+                match procEnv_.stx.Value.TryGetValue s with
+                | true, a -> a |> fnormalize |> Some
+                | _ -> None
+            else
+                None
+
+        let inline getScopedContextValue (procEnv_:ProcEnv) s  =
+            if procEnv_.sCtx.IsNone then
                 None
             else
-                match procEnv.sCtx.Value.ctx.TryGetValue s with
+                match procEnv_.sCtx.Value.ctx.TryGetValue s with
                 | true, a -> a |> fnormalize |> Some
                 | _ ->
                     None
 
-        let getGlobalContextValue s =
-            match procEnv.gCtx.ctx.TryGetValue s with
+        let inline getGlobalContextValue (procEnv_:ProcEnv) s =
+            match procEnv_.gCtx.ctx.TryGetValue s with
             | true, a -> a |> fnormalize |> Some
             | _ ->
                 None
 
-        let getValue s =
-            match getStackValue s with
-            | Some v -> v
+        let inline getValueBase (procEnv_:ProcEnv) s =
+            match getStackValue procEnv_ s with
+            | Some v -> 0, v
             | None ->
-                match getScopedContextValue s with
-                | Some v -> v
+                match getScopedContextValue procEnv_ s with
+                | Some v -> 1, v
                 | None ->
-                    match getGlobalContextValue s with
-                    | Some v -> v
+                    match getGlobalContextValue procEnv_ s with
+                    | Some v -> 2, v
                     | None ->
-                        getPassedInSymbolValue s
+                        3, getPassedInSymbolValue s
 
-        let sCtxAdd k v (sCtx:ScopedContext) =
-            if sCtx.IsNone then
-                NamedContext.New(None, Map [k, v] |> Some)
-            else
-                ({
-                    sCtx.Value
-                        with
-                            ctx =
-                                sCtx.Value.ctx
-                                |> Map.add k v
-                })
-            |> Some
+        let getValue s = getValueBase procEnv s 
 
         //let reEvaluate v = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack) v
         //let reEvaluate1 sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValueStack_)
         //let reEvaluate2 symbolValues_ sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues_, sysVarValueStack_)
         //let reEvaluate3 parentScopeIdOpt_ symbolValues_ sysVarValueStack_ = evaluate2 (ifPrecise, parentScopeIdOpt_, gContext, sContext, symbolValues_, sysVarValueStack_)
 
-        let reEvaluate v = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, {procEnv with ifTop = false}) v
+        //let reEvaluateNonTop v = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, {procEnv with ifTop = false}) v
+        let reEvaluate v = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, procEnv) v
 
+        //let reRstNonTop = reEvaluateNonTop >> eRst
         let reRst = reEvaluate >> eRst
 
         let reEvaluate1 sysVarValueStack_ =
@@ -605,7 +620,7 @@ module Evaluate =
                 procEnv
                     with
                         stx = sysVarValueStack_
-                        ifTop = false
+                        //ifTop = false
             }
             evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, updatedProcEnv)
         let reEvaluate2 symbolValues_ sysVarValueStack_ =
@@ -613,7 +628,7 @@ module Evaluate =
                 procEnv
                     with
                         stx = sysVarValueStack_
-                        ifTop = false
+                        //ifTop = false
             }
             evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues_, updatedProcEnv)
         let reEvaluate3 parentScopeIdOpt_ symbolValues_ sysVarValueStack_ =
@@ -621,7 +636,7 @@ module Evaluate =
                 procEnv
                     with
                         stx = sysVarValueStack_
-                        ifTop = false
+                        //ifTop = false
             }
             evaluate2 (ifPrecise, parentScopeIdOpt_, symbolValues_, updatedProcEnv)
 
@@ -663,7 +678,7 @@ module Evaluate =
         | Approximation (Approximation.Real fp) -> //Real fp
             realV fp |> rstIt
         | Approximation (Approximation.Complex fp) -> Complex fp |> rstIt
-        | Identifier (Symbol s) -> getValue s |> rstIt
+        | Identifier (Symbol s) -> getValue s |> snd |> rstIt
         | Argument (Symbol s) -> failwithf  "Cannot evaluate an argument %s" s
         | Sum xs -> xs |> List.map reRst |> List.reduce fadd |> fnormalize |> rstIt
         | Product xs ->
@@ -682,12 +697,10 @@ module Evaluate =
         | FunctionN (f, xs) -> xs |> List.map reRst |> fapplyN f |> fnormalize |> rstIt
         | FunInvocation (Symbol parentFxName, paramValueExprList) ->
             let cal_param_fd_val () = paramValueExprList |> List.map reRst
-
             let cal_param_obj_val () =
                 paramValueExprList
                 |> List.map (reRst >> box)
                 |> List.toArray
-
             let cal_param_real_val () =
                 paramValueExprList
                 |> List.map (fun paramValueExpr ->
@@ -715,7 +728,6 @@ module Evaluate =
                     | _ -> failwithf "vector parameter is required for %s" parentFxName
                 )
                 |> Array.ofList
-
             let cal_param_list_of_vec_val () : TensorWrapper list =
                 paramValueExprList
                 |> List.map (fun paramValueExpr ->
@@ -795,7 +807,15 @@ module Evaluate =
 
                 let sid = Some (scopeId ())
                 let sCtxFF = scopeCtxNew parentScopeIdOpt 
-                let fd = (getValue "funDict").funDict
+                let depth, fd =
+                    match (getValue "funDict") with
+                    | 3, f
+                    | 2, f ->
+                        procEnv.depth, f.funDict
+                    | 1, f ->
+                        procEnv.depth + 1, f.funDict
+                    | _, f ->
+                        failwith "Invalid funDict"
 
 
 
@@ -804,6 +824,24 @@ module Evaluate =
                     |> Seq.skip skip
                     |> Seq.mapi (fun i sb ->
                         sb.SymbolName, reRst exprs[i + skip]
+                    )
+
+                let exprsInFuncParamEvaluationWithDefParamCount (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) =
+                    let pCnt = exprs[1].int
+                    let dCnt = exprs[2].int
+                    symbols
+                    |> Seq.indexed
+                    |> Seq.choose (fun (i, sb) ->
+                        if i = 0 then
+                            Some (sb.SymbolName, Str exprs[i].Ident.SymbolName) //reRst exprs[i + skip]
+                        elif i = 1 || i = 2 then
+                            None
+                        elif i = 3 then
+                            Some (sb.SymbolName, exprs[3..pCnt] |> NestedExpr) //name 必在第一位
+                        elif i = 4 then
+                            Some (sb.SymbolName, exprs[pCnt..pCnt + dCnt] |> NestedExpr)
+                        else
+                            failwith "Invalid fun defined"
                     )
 
 
@@ -822,7 +860,7 @@ module Evaluate =
                         match parentFxBody with
                         | Identifier aSymbol ->
                             //symbolValues[aSymbol.SymbolName]
-                            getValue aSymbol.SymbolName
+                            getValue aSymbol.SymbolName |> snd
                         | FunInvocation _ ->                       
                             
                             reEvaluate3 sid symbolValues updatedStack parentFxBody
@@ -841,9 +879,9 @@ module Evaluate =
                                 )
                             obj2FloatPoint rst |> rstIt
 
-                    | DTProc (procList, skip) -> //超級重要一點：在 Proc 內部是不會知曉 evaluate 時候的 symbol values 的！(只能是是 param 傳進 expr)
+                    | DTProc (procList, skip, paramDefCountOpt) -> //超級重要一點：在 Proc 內部是不會知曉 evaluate 時候的 symbol values 的！(只能是是 param 傳進 expr)
                         let procStepId () = System.Guid.NewGuid()
-                        
+                        //let ifTop = if parentFxName = "main" then true else false
                         let rec evalProc
                             (procList_: ((Symbol list) * DefBody) list)
                             //(prevOutputOpt: FloatingPoint option)
@@ -865,13 +903,20 @@ module Evaluate =
                                     if paramValueExprListOpt.IsSome then
                                         //頂層函數吃到的表達式傳入
                                         let paramValueExprList_ = paramValueExprListOpt.Value
-                                        let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation paramSymbols paramValueExprList_ skip //ifTop
+                                        let evaluatedArgsOfParentCall =
+                                            //match paramDefCountOpt with
+                                            //| Some (pc, dc) ->
+                                            if parentFxName = "def" then
+                                                exprsInFuncParamEvaluationWithDefParamCount paramSymbols paramValueExprList_ //ifTop
+                                            //| None ->
+                                            else
+                                                exprsInFuncParamEvaluation paramSymbols paramValueExprList_ skip //ifTop
                                         evaluatedArgsOfParentCall
                                         |> Seq.append (seq["stepId", Str (procStepId_.ToString())])
                                         |> Map
                                         |> Some
                                     else
-                                        procEnv.stx
+                                        procEnv_.stx
                                         ////第一層 defBody 輸出綁 第二層 paramSymbols
                                         //let input = 
                                         //    if paramSymbols.Length > 1 then
@@ -912,7 +957,18 @@ module Evaluate =
                                 let rst =
                                     match defBody with
                                     | DBFun (almightFun, defOut) ->
-                                        let updatedProcEnv = almightFun procEnv symbolValues //gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
+                                        let updatedProcEnv = almightFun parentScopeIdOpt {procEnv_ with stx = updatedStack} symbolValues paramValueExprListOpt //gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
+
+                                        //let updatedProcEnv =
+                                        //    if updatedProcEnv_.prevOutput.IsNone || updatedProcEnv_.prevOutput.Value.ifEvalRst then
+                                        //        updatedProcEnv_
+                                        //    else
+                                        //        {
+                                        //            updatedProcEnv_
+                                        //                with
+                                        //                    prevOutput = updatedProcEnv_.prevOutput |> Option.map (fun o -> rstIt o)
+                                        //        }
+
                                         let sCtx = 
                                             if updatedProcEnv.sCtx.IsSome then
                                                 updatedProcEnv.sCtx
@@ -922,46 +978,59 @@ module Evaluate =
                                         let updatedProcEnvIt = {
                                             updatedProcEnv
                                                 with
-                                                    sCtx = (sCtxAdd "it" updatedProcEnv.prevOutput.Value.eRst sCtx)
+                                                    sCtx =
+                                                        if updatedProcEnv.prevOutput.IsSome then
+                                                            (sCtxAdd "it" updatedProcEnv.prevOutput.Value sCtx)
+                                                        else
+                                                            (sCtxAdd "it" Undef sCtx)
                                         }
                                         match defOut with
                                         | OutCtx ->
                                             updatedProcEnvIt, updatedProcEnvIt.sCtx.Value |> Context
                                         | OutFP ->
-                                            updatedProcEnvIt, updatedProcEnvIt.prevOutput.Value
+                                            if updatedProcEnvIt.prevOutput.IsSome then
+                                                updatedProcEnvIt, updatedProcEnvIt.prevOutput.Value
+                                            else
+                                                updatedProcEnvIt, Undef
                                         | OutVar vl ->
-                                            updatedProcEnvIt, vl |> List.map (fun s -> getValue s.SymbolName) |> NestedList
+                                            updatedProcEnvIt, vl |> List.map (fun s -> getValue s.SymbolName |> snd) |> NestedList
                                     | DBExp (exprList, defOut) ->
-                                        let rstList, procEnv_ =
+                                        let rstList, procEnv__ =
                                             exprList
-                                            |> List.fold (fun (rstList_, procEnv_) a ->
+                                            |> List.fold (fun (rstList_, _procEnv_) a ->
                                                 //evaluate2        (ifPrecise, parentScopeIdOpt_, gContext, sContext, symbolValues_, sysVarValueStack_)
-                                                let evalV = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, procEnv_) a
-
+                                                let evalV = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, _procEnv_
+                                                                                                                        //with
+                                                                                                                        //    ifTop = if (parentFxName = "main" && a.FunNameOpt.IsSome && a.FunNameOpt.Value.SymbolName = "let") || (parentFxName = "let" && _procEnv_.ifTop) then true else false}
+                                                                        ) a
+                                                let updEnv, evalRst = evalV.ER
                                                 let updatedProcEnv = {
-                                                    procEnv_
+                                                    updEnv
                                                         with
-                                                            sCtx = (sCtxAdd "it" evalV.eRst procEnv_.sCtx)
+                                                            sCtx = (sCtxAdd "it" evalRst updEnv.sCtx)
+                                                            prevOutput = Some evalRst
                                                 }
 
                                                 (procStepId(), evalV.eRst)::rstList_, updatedProcEnv
-                                            ) ([], {procEnv with ifTop = false})
+                                            ) ([], {procEnv_ with stx = updatedStack})
 
                                         //scopedContextOpt.Value.ctx["it"] <- fp
 
                                         match defOut with
                                         | OutCtx ->
-                                            procEnv_, procEnv_.sCtx.Value |> Context
+                                            procEnv__, procEnv__.sCtx.Value |> Context
                                         | OutFP ->
-                                            procEnv_, procEnv_.prevOutput.Value
+                                            procEnv__, procEnv__.prevOutput.Value
                                         | OutVar vl ->
-                                            procEnv_, vl |> List.map (fun s -> getValue s.SymbolName) |> NestedList
+                                            procEnv__, vl |> List.map (fun s -> getValueBase procEnv__ s.SymbolName |> snd) |> NestedList
+                                    |> EvalRst
+                                    |> Some
 
-
-                                evalProc restProcList procEnv_   None                      (procStepId())
+                                evalProc restProcList {procEnv_ with prevOutput = rst}   None                      (procStepId())
 
                         let finalOutput =
-                                evalProc     procList procEnv   (Some paramValueExprList)   (procStepId())
+                                evalProc     procList {procEnv with depth = depth}      (Some paramValueExprList)   (procStepId())
+                                //evalProc     procList  procEnv                          (Some paramValueExprList)   (procStepId())
                         finalOutput
                        
                     | DTFunI1toI1 f ->
@@ -992,7 +1061,7 @@ module Evaluate =
         (symbolValues:Map<string, FloatingPoint>)
         (procEnv:ProcEnv)
         //(sysVarValuesStack:Stack)
-        = //ifTop =
+        =
         //evaluate2 (ifPrecise, parentScopeIdOpt, gContext, sContext, symbolValues, sysVarValuesStack) //, None, ifTop)
         evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, procEnv) //, None, ifTop)
 
@@ -1010,7 +1079,7 @@ module Evaluate =
             prevOutput          = None
             stx                 = None
             procParamArgExpr    = None
-            ifTop               = true
+            depth               = 0
         }
         evaluate2 (
             IF_PRECISE

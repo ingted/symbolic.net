@@ -2,7 +2,7 @@
 #r @"nuget:MathNet.Numerics"
 #r @"nuget:FsUnit"
 #r @"nuget:FParsec"
-#r @"nuget:MathNet.Numerics.FSharp"
+#r @"nuget:MathNet.Numerics.FSharp, 6.0.0-beta1"
 #r @"nuget:PersistedConcurrentSortedList"
 #r @"nuget:FAkka.Deedle"
 #load @"..\..\SymbolicNet6.Test\Global.fs"
@@ -24,12 +24,12 @@ let scd = S cdInS
 cdInS.TryAdd (456, 789)
 
 
-(SymbolicExpression.Parse "(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
-(SymbolicExpression.Parse "str(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
+(SymbolicExpression.Parse "(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0]).eRst
+(SymbolicExpression.Parse "str(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0]).eRst
 
 Evaluate.IF_PRECISE <- true
 
-let (BR ff) = (SymbolicExpression.Parse "(a + 1)^(x^(y * 2))").Evaluate(dict ["a", FloatingPoint.Real 2.0; "x", FloatingPoint.Real 3.0; "y", FloatingPoint.Real 4.0;])
+let (BR ff) = (SymbolicExpression.Parse "(a + 1)^(x^(y * 2))").Evaluate(dict ["a", FloatingPoint.Real 2.0; "x", FloatingPoint.Real 3.0; "y", FloatingPoint.Real 4.0;]).eRst
 
 let (Number n) = pow 3N (pow 3N 8N)
 
@@ -41,68 +41,136 @@ let symX = Symbol "x"
 let symY = Symbol "y"
 let symZ = Symbol "z"
 
+let name = Symbol "name"
+let defList = Symbol "defList"
+let paramList = Symbol "param"
+let defCount = Symbol "defCnt"
+let paramCount = Symbol "paramCnt"
+
+let def = Symbol "def"
+let defLineCount = Symbol "defLineCount"
 
 Definition.funDict.TryRemove "let"
 Definition.funDict.TryAdd ("let", (DTProc ([
-    [symX; symV], (DBFun ((fun g s prevO stx exprs ifTop ->
-        stx.Value.TryGetValue "x" |> printfn "%A"
+    [symX; symV], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
+        let g = provEnv.gCtx
+        let s = provEnv.sCtx
+        let prevO = provEnv.prevOutput
+        let stx = provEnv.stx
+        let ifTop = provEnv.depth = 0
+        //stx.Value.TryGetValue "x" |> printfn "%A"
         exprs.Value[0] |> printfn "exprs[0]: %A"
         exprs.Value[0].Ident.SymbolName |> printfn "exprs.Value[0].Ident.SymbolName: %A"
         printfn $"ifTop: {ifTop}"
-        let effectIn =
-            if ifTop then
-                g.ctx
-            else
-                s.Value.ctx
         let stxVal_v = stx.Value.TryGetValue("v") |> snd
-        effectIn[exprs.Value[0].Ident.SymbolName] <- stxVal_v
+        //effectIn[exprs.Value[0].Ident.SymbolName] <- stxVal_v
         printfn "stxId: %A" stxVal_v
-        Undef
-    ), OutFP))
-    [symX;], (DBFun ((fun g s prevO stx exprs ifTop ->
-        stx.Value.TryGetValue "x" |> printfn "%A"
-        exprs.IsNone |> printfn "exprs.IsNone %A"
-        printfn $"ifTop: {ifTop}"
-        printfn "stxId: %A" (stx.Value.TryGetValue "stepId" |> snd)
-        let effectIn =
+        let out = {
+            provEnv
+                with
+                    prevOutput = Some Undef
+        }
+        let effected =
             if ifTop then
-                g.ctx
+                {out with gCtx = gCtxAdd exprs.Value[0].Ident.SymbolName stxVal_v out.gCtx}
             else
-                s.Value.ctx
-        //effectIn["ttc"]  |> printfn "ttc: %A"
-        Undef
+                {out with sCtx = sCtxAdd exprs.Value[0].Ident.SymbolName stxVal_v out.sCtx}
+        effected
+        
     ), OutFP))
-], 1)))
+    //[symX;], (DBFun ((fun g s prevO stx exprs ifTop ->
+    //    stx.Value.TryGetValue "x" |> printfn "%A"
+    //    exprs.IsNone |> printfn "exprs.IsNone %A"
+    //    printfn $"ifTop: {ifTop}"
+    //    printfn "stxId: %A" (stx.Value.TryGetValue "stepId" |> snd)
+    //    let effectIn =
+    //        if ifTop then
+    //            g.ctx
+    //        else
+    //            s.Value.ctx
+    //    //effectIn["ttc"]  |> printfn "ttc: %A"
+    //    Undef
+    //), OutFP))
+], 1, None)))
 
 
 Definition.funDict.TryRemove "print"
 Definition.funDict.TryAdd ("print", (DTProc ([
-    [symX;], (DBFun ((fun g s prevO stx exprs ifTop ->
+    [symX;], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
+        let g = provEnv.gCtx
+        let s = provEnv.sCtx
+        let prevO = provEnv.prevOutput
+        let stx = provEnv.stx
+        let ifTop = provEnv.depth = 0
         printfn "%A" (stx.Value.TryGetValue "x" |> snd)
-        Undef
+        provEnv
     ), OutFP))
-], 0)))
+], 0, None)))
 
 Definition.funDict.TryRemove "def"
 Definition.funDict.TryAdd ("def", (DTProc ([
-    [symX; symV], (DBFun (fun g s prevO stx exprs ifTop ->
-        stx.GetValue "x" |> printfn "%A"
+    [name; paramCount; defCount; paramList; defList], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
+        let g = provEnv.gCtx
+        let s = 
+            if provEnv.sCtx.IsSome then
+                provEnv.sCtx.Value
+            else
+                NamedContext.New(parentScopeIdOpt, None)
+        let prevO = provEnv.prevOutput
+        let stx = provEnv.stx
+        let ifTop = provEnv.depth = 0
+        let _, (NestedExpr pList) = stx.Value.TryGetValue paramList.SymbolName
+        let _, (NestedExpr dList) = stx.Value.TryGetValue defList.SymbolName
+        pList |> printfn "%A"
         exprs.Value[0] |> printfn "exprs[0]: %A"
         exprs.Value[0].Ident.SymbolName |> printfn "exprs.Value[0].Ident.SymbolName: %A"
         printfn $"ifTop: {ifTop}"
-        let effectIn =
+
+        let _, Str funName = stx.Value.TryGetValue name.SymbolName
+        let funParam =  pList |>List.map (fun e -> e.Ident)
+        //let funDef =  dList
+
+        //let ctx =
+        //    if ifTop then
+        //        s.ctx
+        //    else
+        //        g.ctx
+
+        let fd =
             if ifTop then
-                g
+                Definition.funDict
             else
-                s
-        effectIn[exprs.Value[0].Ident.SymbolName] <- stx.GetValue("v").Value
-        printfn "stxId: %A" (stx.GetValue "stepId")
-        Undef
-    ))
+                if s.ctx.ContainsKey "funDict" then
+                    s.ctx["funDict"].funDict
+                else
+                    new FunDict()
 
-], 0)))
+        let removed, _ = fd.TryRemove funName
+        let added = fd.TryAdd (funName, DTProc ([funParam, DBExp (dList, OutFP)], 0, None))
+
+        printfn $"removed: {removed}, added: {added}"
+
+        let out = provEnv
+
+        let effected =
+            if ifTop then
+                out
+            else
+                {out with sCtx = sCtxAdd "funDict" (FD fd) (Some s)}
+        effected
+        //provEnv
+    ), OutFP))
+], 0, None )))
 
 
+(SymbolicExpression.Parse "def(yyds, 1, 1, x, x+1)").Evaluate(dict [])
+(SymbolicExpression.Parse "yyds(123)").Evaluate(dict [])
+
+Definition.funDict.Keys
+Definition.funDict["yyds"]
+
+(SymbolicExpression.Parse "def(yyds, 1, 3, x, x+1, x*2, x/3)").Evaluate(dict [])
+(SymbolicExpression.Parse "yyds(123)").Evaluate(dict [])
 (*
 ¹êÅç
 //let x = 1
@@ -122,8 +190,137 @@ Definition.funDict.TryAdd ("main", DTProc ([
         Infix.parseOrThrow "let(ttc, 789)"
         Infix.parseOrThrow "print(ttc)"
     ], OutVar [Symbol "ttc"]))
-], 0))
+], 0, None))
 (SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+
+Definition.funDict.TryRemove "main"
+Definition.funDict.TryAdd ("main", DTProc ([
+    [], (DBExp ([
+        Infix.parseOrThrow "let(ttc1, 789)"
+        Infix.parseOrThrow "print(ttc)"
+    ], OutVar [Symbol "ttc"; Symbol "ttc1"]))
+], 0, None))
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+
+
+
+
+
+open System
+let outputCode =
+    EvalRst
+    ({ gCtx = { id = Guid.Parse "019720a2-fc49-7a2c-a6b0-36a10a2932ad"
+                ctx = Map [] }
+       sCtx =
+        Some
+          { id = Guid.Parse "019720a2-fc4c-7aaa-8232-62c5af030f17"
+            ctx =
+             Map
+               [("it",
+                 EvalRst
+                   ({ gCtx =
+                       { id =
+                          Guid.Parse "019720a2-fc49-7a2c-a6b0-36a10a2932ad"
+                         ctx = Map [] }
+                      sCtx =
+                       Some
+                         { id =
+                            Guid.Parse "019720a2-fc4c-709d-be14-f7be514dfab3"
+                           ctx = Map [("it", Undef); ("ttc", BR 789N)] }
+                      prevOutput = Some Undef
+                      stx =
+                       Some
+                         (Map
+                            [("stepId",
+                              Str "f766bb3b-60b0-4367-9333-bfede9f321a8");
+                             ("v", BR 789N)])
+                      procParamArgExpr = None
+                      depth = 0 }, Undef))] }
+       prevOutput =
+        Some
+          (EvalRst
+             ({ gCtx =
+                 { id = Guid.Parse "019720a2-fc49-7a2c-a6b0-36a10a2932ad"
+                   ctx = Map [] }
+                sCtx =
+                 Some
+                   { id = Guid.Parse "019720a2-fc4c-7aaa-8232-62c5af030f17"
+                     ctx =
+                      Map
+                        [("it",
+                          EvalRst
+                            ({ gCtx =
+                                { id =
+                                   Guid.Parse "019720a2-fc49-7a2c-a6b0-36a10a2932ad"
+                                  ctx = Map [] }
+                               sCtx =
+                                Some
+                                  { id =
+                                     Guid.Parse "019720a2-fc4c-709d-be14-f7be514dfab3"
+                                    ctx =
+                                     Map [("it", Undef); ("ttc", BR 789N)] }
+                               prevOutput = Some Undef
+                               stx =
+                                Some
+                                  (Map
+                                     [("stepId",
+                                       Str
+                                         "f766bb3b-60b0-4367-9333-bfede9f321a8");
+                                      ("v", BR 789N)])
+                               procParamArgExpr = None
+                               depth = 0 }, Undef))] }
+                prevOutput =
+                 Some
+                   (EvalRst
+                      ({ gCtx =
+                          { id =
+                             Guid.Parse "019720a2-fc49-7a2c-a6b0-36a10a2932ad"
+                            ctx = Map [] }
+                         sCtx =
+                          Some
+                            { id =
+                               Guid.Parse "019720a2-fc4c-709d-be14-f7be514dfab3"
+                              ctx = Map [("it", Undef); ("ttc", BR 789N)] }
+                         prevOutput = Some Undef
+                         stx =
+                          Some
+                            (Map
+                               [("stepId",
+                                 Str "f766bb3b-60b0-4367-9333-bfede9f321a8");
+                                ("v", BR 789N)])
+                         procParamArgExpr = None
+                         depth = 0 }, Undef))
+                stx =
+                 Some
+                   (Map
+                      [("stepId", Str "43efacbd-6cfb-4a38-803a-27005ad803f6");
+                       ("x", FloatingPoint.Real 9487.0)])
+                procParamArgExpr = None
+                depth = 0 },
+              EvalRst
+                ({ gCtx =
+                    { id = Guid.Parse "019720a2-fc49-7a2c-a6b0-36a10a2932ad"
+                      ctx = Map [] }
+                   sCtx =
+                    Some
+                      { id =
+                         Guid.Parse "019720a2-fc4c-709d-be14-f7be514dfab3"
+                        ctx = Map [("it", Undef); ("ttc", BR 789N)] }
+                   prevOutput = Some Undef
+                   stx =
+                    Some
+                      (Map
+                         [("stepId",
+                           Str "f766bb3b-60b0-4367-9333-bfede9f321a8");
+                          ("v", BR 789N)])
+                   procParamArgExpr = None
+                   depth = 0 }, Undef)))
+       stx =
+        Some (Map [("stepId", Str "b621bd1d-3df1-4b50-9d23-f4e0737975d4")])
+       procParamArgExpr = None
+       depth = 0 }, NestedList [FloatingPoint.Real 9487.0])
+
+
 
 Definition.funDict.TryRemove "main"
 Definition.funDict.TryAdd ("main", DTProc ([
