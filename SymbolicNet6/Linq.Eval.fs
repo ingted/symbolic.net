@@ -925,7 +925,8 @@ module Evaluate =
                                             else
                                                 exprsInFuncParamEvaluation paramSymbols paramValueExprList_ skip //ifTop
                                         evaluatedArgsOfParentCall
-                                        |> Seq.append (seq["stepId", Str (procStepId_.ToString())])
+                                        |> Seq.append (if procEnv_.stx.IsSome then procEnv_.stx.Value |> Map.toSeq else seq [])
+                                        |> Seq.append (seq ["stepId", Str (procStepId_.ToString())])
                                         |> Map
                                         |> Some
                                     else
@@ -1050,7 +1051,7 @@ module Evaluate =
 
                                                 let updatedProcEnv =
                                                     if ifDef then
-                                                        updatedEnv
+                                                        updatedEnv_
                                                     else
                                                         let updEnv, evalRst = evalV.ER
                                                         {

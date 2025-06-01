@@ -109,7 +109,7 @@ Definition.funDict.TryAdd ("print", (DTProc ([
         let prevO = provEnv.prevOutput
         let stx = provEnv.stx
         let ifTop = provEnv.depth = 0
-        printfn "%A" (stx.Value.TryGetValue "x" |> snd)
+        printfn "=> %A" (stx.Value.TryGetValue "x" |> snd)
         provEnv
     ), OutFP))
 ], 0, None)))
@@ -194,6 +194,8 @@ Definition.funDict.TryAdd ("main", DTProc ([
 ], 0, None))
 (SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
 
+//55a82fb8d6e0a188c7dfff2ae3c18d4459b8cc4d
+//這個 commit def 內的 def 一樣會定義在 depth = 0，所以出來繼續用，接下來要改成 def 內的只在 def 內生效
 (SymbolicExpression.Parse "def(yyds, 1, 1, x, x+1)").Evaluate(dict [])
 (SymbolicExpression.Parse "yyds(123)").Evaluate(dict [])
 
@@ -210,12 +212,67 @@ Definition.funDict.TryAdd ("main", DTProc ([
 
 
 (SymbolicExpression.Parse "def(ttc, 1, 3, x, def(t1,1,1,x,x+100000), print(x*2), t1(x/3))").Evaluate(dict [])
-
+(SymbolicExpression.Parse "ttc(123)").Evaluate(dict [])
+(SymbolicExpression.Parse "t1(123)").Evaluate(dict [])
 
 (SymbolicExpression.Parse "def(yyds, 1, 3, x, print(x+1), print(x*2), x/3)").Evaluate(dict [])
 (SymbolicExpression.Parse "yyds(123)").Evaluate(dict [])
 
 (SymbolicExpression.Parse "tttt(123)")
+
+
+
+
+
+
+
+Definition.funDict.TryRemove "main"
+Definition.funDict.TryAdd ("main", DTProc ([
+    [], (DBExp ([
+        Infix.parseOrThrow "let(ttc1, 789)"
+        Infix.parseOrThrow "let(y, 10000000)"
+        Infix.parseOrThrow "print(ttc)"
+        Infix.parseOrThrow "print(ttc1)"
+        Infix.parseOrThrow "print(ttc1)"
+        Infix.parseOrThrow "def(ttc, 2, 3, x, y, def(t1,1,1,x,x+100000), print(x*2), t1(x + y/3))"
+        Infix.parseOrThrow "print(ttc(ttc1, 9))"
+        Infix.parseOrThrow "let(gg,ttc(ttc1, 9))"
+        Infix.parseOrThrow "print(gg)"
+    ], OutFP))
+], 0, None))
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+
+
+
+Definition.funDict.TryRemove "main"
+Definition.funDict.TryAdd ("main", DTProc ([
+    [], (DBExp ([
+        Infix.parseOrThrow "let(ttc1, 789)"
+        //Infix.parseOrThrow "let(y, 10000000)"
+        Infix.parseOrThrow "print(ttc)"
+        Infix.parseOrThrow "print(ttc1)"
+        Infix.parseOrThrow "print(ttc1)"
+        Infix.parseOrThrow "def(ttc, 2, 3, x, y, def(t1,1,1,x,x+100000+y), print(x*2), t1(x + y/3))"
+        (*
+        正確計算：
+        > 789+4;;
+        val it: int = 793
+
+        > 793+100000+12;;
+        val it: int = 100805
+        *)
+        Infix.parseOrThrow "print(ttc(ttc1, 12))"
+        Infix.parseOrThrow "let(gg,ttc(ttc1, 12))"
+        Infix.parseOrThrow "print(gg)"
+    ], OutVar [Symbol "gg"]))
+], 0, None))
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+
+
+
+
+
+
 
 
 
