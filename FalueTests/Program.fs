@@ -183,22 +183,22 @@ TestCore.testIdFilterOut <- Some [|32; 42; 52; 62|]
     test 2 forcePrint (<@ fun () -> SymbolicExpression.Parse("(u.*(v + 1)+2) * 2").Evaluate(dict [                                                             
                                         "u", FloatingPoint.RealVector (vector [10.0; 20.0; 30.0])                                                              
                                         "v", FloatingPoint.RealVector (vector [10.0; 20.0; 30.0])                                                              
-                                    ]).eRst                                                                                                                    @>) (RealVector (vec [224.0; 844.0; 1864.0]))
-    test 3 forcePrint (<@ fun () -> SymbolicExpression.Parse("dup4(7,8)").Evaluate(dict ["z", FloatingPoint.Real -8.0]).eRst                                   @>) (FloatingPoint.Real 2944.0)
-    test 4 forcePrint (<@ fun () -> SymbolicExpression.Parse("dup4(7,8)").Evaluate(dict ["z", FloatingPoint.Real 8.0]).eRst                                    @>) (FloatingPoint.Real 2960.0)
+                                    ])                                                                                                                         @>) (RealVector (vec [224.0; 844.0; 1864.0]))
+    test 3 forcePrint (<@ fun () -> SymbolicExpression.Parse("dup4(7,8)").Evaluate(dict ["z", FloatingPoint.Real -8.0])                                        @>) (FloatingPoint.Real 2944.0)
+    test 4 forcePrint (<@ fun () -> SymbolicExpression.Parse("dup4(7,8)").Evaluate(dict ["z", FloatingPoint.Real 8.0])                                         @>) (FloatingPoint.Real 2960.0)
     //test 32 forcePrint (<@ fun () -> SymbolicExpression.Parse("dup4(7,8)").EvaluateMode0(dict ["z", FloatingPoint.Real -8.0])                                  @>) (FloatingPoint.Real -1280.0)
     //test 42 forcePrint (<@ fun () -> SymbolicExpression.Parse("dup4(7,8)").EvaluateMode0(dict ["z", FloatingPoint.Real 8.0])                                   @>) (FloatingPoint.Real 1552.0)
-    test 5 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx7(7,vec(9,11,13),19)").Evaluate(dict ["scale", FloatingPoint.Real 5.0]).eRst                   @>) (RealVector (vec [180.0; 221.0; 257.0]))
-    test 6 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx7(7,vec(9,11,13),19)").Evaluate(dict ["scale", FloatingPoint.Real -17.0]).eRst                 @>) (RealVector (vec [180.0; 199.0; 257.0]))
+    test 5 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx7(7,vec(9,11,13),19)").Evaluate(dict ["scale", FloatingPoint.Real 5.0])                        @>) (RealVector (vec [180.0; 221.0; 257.0]))
+    test 6 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx7(7,vec(9,11,13),19)").Evaluate(dict ["scale", FloatingPoint.Real -17.0])                      @>) (RealVector (vec [180.0; 199.0; 257.0]))
     test 602 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx11(2,3,5)").Evaluate(dict ["x", FloatingPoint.Real -100.0;                                   
                                                                                              "y", FloatingPoint.Real -10000.0;                                 
-                                                                                             "z", FloatingPoint.Real -1000000.0]).eRst                         @>) (FloatingPoint.Real 17.0)
+                                                                                             "z", FloatingPoint.Real -1000000.0])                              @>) (FloatingPoint.Real 17.0)
                                                                                                                                                                
                                                                                              //函數參數無x1，會自動從 symbol value 取                             
     test 603 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx111(2,3,5)").Evaluate(dict ["x1", FloatingPoint.Real -100.0;                                 
                                                                                              //函數參數有 x 則在不缺的情況下不使用                                  
                                                                                              "y", FloatingPoint.Real -10000.0;                                 
-                                                                                             "z", FloatingPoint.Real -1000000.0]).eRst                         @>) (FloatingPoint.Real -397.0)
+                                                                                             "z", FloatingPoint.Real -1000000.0])                              @>) (FloatingPoint.Real -397.0)
                                                                                                                                                                
     test 51 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx7(7,vec(9,11,13),19)").EvaluateCorrect(dict ["scale", FloatingPoint.Real 5.0])                @>) (RealVector (vec [180.0; 221.0; 257.0]))
     test 61 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx7(7,vec(9,11,13),19)").EvaluateCorrect(dict ["scale", FloatingPoint.Real -17.0])              @>) (RealVector (vec [180.0; 199.0; 257.0]))
@@ -211,16 +211,16 @@ TestCore.testIdFilterOut <- Some [|32; 42; 52; 62|]
                                                                                                                                                                
     //test 52 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx7(7,vec(9,11,13),19)").EvaluateMode0(dict ["scale", FloatingPoint.Real 5.0])                  @>) (RealVector (vec [180.0; 235.0; 257.0]))
     //test 62 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx7(7,vec(9,11,13),19)").EvaluateMode0(dict ["scale", FloatingPoint.Real -17.0])                @>) (RealVector (vec [180.0; 235.0; 257.0]))
-    test 7 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx5(7,vec(9,11,13))").Evaluate(dict ["scale", FloatingPoint.Real -8.0]).eRst                     @>) (RealVector (vec [-63.0; -76.0; -94.0]))
-    test 8 forcePrint (<@ fun () -> SymbolicExpression.Parse("hi()").Evaluate(dict []).eRst                                                                    @>) Undef
-    test 9 forcePrint (<@ fun () -> SymbolicExpression.Parse("dup1(7,8)").Evaluate(dict []).eRst                                                               @>) (FloatingPoint.Real 24.0)
-    test 10 forcePrint (<@ fun () -> SymbolicExpression.Parse("dup2(7,8)").Evaluate(dict []).eRst                                                              @>) (FloatingPoint.Real 200.0)
+    test 7 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx5(7,vec(9,11,13))").Evaluate(dict ["scale", FloatingPoint.Real -8.0])                          @>) (RealVector (vec [-63.0; -76.0; -94.0]))
+    test 8 forcePrint (<@ fun () -> SymbolicExpression.Parse("hi()").Evaluate(dict [])                                                                         @>) Undef
+    test 9 forcePrint (<@ fun () -> SymbolicExpression.Parse("dup1(7,8)").Evaluate(dict [])                                                                    @>) (FloatingPoint.Real 24.0)
+    test 10 forcePrint (<@ fun () -> SymbolicExpression.Parse("dup2(7,8)").Evaluate(dict [])                                                                   @>) (FloatingPoint.Real 200.0)
     test 11 forcePrint (<@ fun () -> " "                                                                                                                       @>) " "
     test 12 forcePrint (<@ fun () -> 2                                                                                                                         @>) 2
-    test 13 forcePrint (<@ fun () -> SymbolicExpression(Infix.parseOrThrow("x")).Evaluate(dict ["x", FloatingPoint.Real 2.0]).eRst                             @>) (FloatingPoint.Real 2.0)
-    test 14 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx2(1, 3)").Evaluate(dict ["scale", MathNet.Symbolics.FloatingPoint.Real 99.0]).eRst            @>) (RealVector (vec [6.0; 99.0; 8.0]))
-    test 15 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx3(1, 3)").Evaluate(dict ["scale", MathNet.Symbolics.FloatingPoint.Real 99.0]).eRst            @>) (RealVector (vec [799.0; 803.0]))
-    test 16 forcePrint (<@ fun () -> SymbolicExpression.Parse("ma_base(0.0, 30.0, 1.0)").Evaluate(dict ["cur", MathNet.Symbolics.FloatingPoint.Real 9.0]).eRst @>) (RealVector (vec [1.5; 2.5; 14.5]))
+    test 13 forcePrint (<@ fun () -> SymbolicExpression(Infix.parseOrThrow("x")).Evaluate(dict ["x", FloatingPoint.Real 2.0])                                  @>) (FloatingPoint.Real 2.0)
+    test 14 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx2(1, 3)").Evaluate(dict ["scale", MathNet.Symbolics.FloatingPoint.Real 99.0])                 @>) (RealVector (vec [6.0; 99.0; 8.0]))
+    test 15 forcePrint (<@ fun () -> SymbolicExpression.Parse("mx3(1, 3)").Evaluate(dict ["scale", MathNet.Symbolics.FloatingPoint.Real 99.0])                 @>) (RealVector (vec [799.0; 803.0]))
+    test 16 forcePrint (<@ fun () -> SymbolicExpression.Parse("ma_base(0.0, 30.0, 1.0)").Evaluate(dict ["cur", MathNet.Symbolics.FloatingPoint.Real 9.0])      @>) (RealVector (vec [1.5; 2.5; 14.5]))
 
     
     

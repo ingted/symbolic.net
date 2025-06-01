@@ -42,14 +42,24 @@ module VisualExpression =
     open Rational
     open ExpressionPatterns
 
-    let private functionNameMap = FSharpType.GetUnionCases typeof<Function> |> Array.map (fun case -> FSharpValue.MakeUnion(case, [||]) :?> Function, case.Name.ToLowerInvariant()) |> Map.ofArray
-    let private functionNaryNameMap = FSharpType.GetUnionCases typeof<FunctionN> |> Array.map (fun case -> FSharpValue.MakeUnion(case, [||]) :?> FunctionN, case.Name.ToLowerInvariant()) |> Map.ofArray
-    let private nameFunctionMap = functionNameMap |> Map.toList |> List.map (fun (f,n) -> (n,f)) |> Map.ofList
-    let private nameFunctionNaryMap = functionNaryNameMap |> Map.toList |> List.map (fun (f,n) -> (n,f)) |> Map.ofList
-    let private functionName f = Map.find f functionNameMap
-    let private functionNaryName f = Map.find f functionNaryNameMap
-    let private nameFunction name = Map.find name nameFunctionMap
-    let private nameFunctionNary name = Map.find name nameFunctionNaryMap
+    let functionNameMap = FSharpType.GetUnionCases typeof<Function> |> Array.map (fun case -> FSharpValue.MakeUnion(case, [||]) :?> Function, case.Name.ToLowerInvariant()) |> Map.ofArray
+    let functionNaryNameMap = FSharpType.GetUnionCases typeof<FunctionN> |> Array.map (fun case -> FSharpValue.MakeUnion(case, [||]) :?> FunctionN, case.Name.ToLowerInvariant()) |> Map.ofArray
+    let nameFunctionMap = functionNameMap |> Map.toList |> List.map (fun (f,n) -> (n,f)) |> Map.ofList
+    let nameFunctionNaryMap = functionNaryNameMap |> Map.toList |> List.map (fun (f,n) -> (n,f)) |> Map.ofList
+    let functionName f = Map.find f functionNameMap
+    let functionNaryName f = Map.find f functionNaryNameMap
+    let nameFunction name =
+#if DEBUG
+        try
+            Map.find name nameFunctionMap
+        with
+        | exn ->
+            printfn "[nameFunction][%s] %s" name exn.Message
+            reraise ()
+#else
+        Map.find name nameFunctionMap
+#endif
+    let nameFunctionNary name = Map.find name nameFunctionNaryMap
 
     let fromExpression (style:VisualExpressionStyle) expression =
         let compactPowersOfFunctions = style.CompactPowersOfFunctions

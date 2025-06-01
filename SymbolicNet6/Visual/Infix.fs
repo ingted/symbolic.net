@@ -64,14 +64,14 @@ module private InfixParser =
         let functionTerm = symbolName .>>. functionArgs |>> function
             | f, args ->
                 //printfn "f: %s" f
-                if Definition.funDict.ContainsKey f then
+                if Definition.funDict.ContainsKey f || not (VisualExpression.nameFunctionMap.ContainsKey f || VisualExpression.nameFunctionNaryMap.ContainsKey f) then
                     VisualExpression.FunInvocation (f, BigInteger.One, args)
                 else
                     VisualExpression.Function (f, BigInteger.One, args)
 
         let functionPowerTerm = symbolName .>>. (str_ws "^" >>. integer) .>>. functionArgs |>> function
             | (f, power), args ->
-                if Definition.funDict.ContainsKey f then
+                if Definition.funDict.ContainsKey f || not (VisualExpression.nameFunctionMap.ContainsKey f || VisualExpression.nameFunctionNaryMap.ContainsKey f)  then
                     VisualExpression.FunInvocation (f, BigInteger.One, args)
                 else
                     VisualExpression.Function (f, power, args)

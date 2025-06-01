@@ -1,11 +1,18 @@
+#if INTERACTIVE
 #r @"..\bin\net9.0\SymbolicNet6.dll"
-#r @"nuget:MathNet.Numerics"
+#r @"nuget:MathNet.Numerics, 6.0.0-beta1"
 #r @"nuget:FsUnit"
 #r @"nuget:FParsec"
 #r @"nuget:MathNet.Numerics.FSharp, 6.0.0-beta1"
 #r @"nuget:PersistedConcurrentSortedList"
 #r @"nuget:FAkka.Deedle"
 #load @"..\..\SymbolicNet6.Test\Global.fs"
+
+#r "nuget: DiffSharp.Core, 1.0.7"
+#r "nuget: DiffSharp-cpu, 1.0.7"
+#r "nuget: DiffSharp.Backends.Reference, 1.0.7"
+#r "nuget: DiffSharp.Backends.Torch, 1.0.7"
+#endif
 
 open MathNet.Numerics
 open MathNet.Symbolics
@@ -24,12 +31,12 @@ let scd = S cdInS
 cdInS.TryAdd (456, 789)
 
 
-(SymbolicExpression.Parse "(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0]).eRst
-(SymbolicExpression.Parse "str(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0]).eRst
+(SymbolicExpression.Parse "(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
+(SymbolicExpression.Parse "str(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
 
 Evaluate.IF_PRECISE <- true
 
-let (BR ff) = (SymbolicExpression.Parse "(a + 1)^(x^(y * 2))").Evaluate(dict ["a", FloatingPoint.Real 2.0; "x", FloatingPoint.Real 3.0; "y", FloatingPoint.Real 4.0;]).eRst
+let (BR ff) = (SymbolicExpression.Parse "(a + 1)^(x^(y * 2))").Evaluate(dict ["a", FloatingPoint.Real 2.0; "x", FloatingPoint.Real 3.0; "y", FloatingPoint.Real 4.0;])
 
 let (Number n) = pow 3N (pow 3N 8N)
 
@@ -128,6 +135,7 @@ Definition.funDict.TryAdd ("def", (DTProc ([
 
         let _, Str funName = stx.Value.TryGetValue name.SymbolName
         let funParam =  pList |>List.map (fun e -> e.Ident)
+        printfn "pList: %A" pList
         //let funDef =  dList
 
         //let ctx =
@@ -146,7 +154,9 @@ Definition.funDict.TryAdd ("def", (DTProc ([
                     new FunDict()
 
         let removed, _ = fd.TryRemove funName
-        let added = fd.TryAdd (funName, DTProc ([funParam, DBExp (dList, OutFP)], 0, None))
+        let proc = DTProc ([funParam, DBExp (dList, OutFP)], 0, None)
+        printfn "%A" proc
+        let added = fd.TryAdd (funName, proc)
 
         printfn $"removed: {removed}, added: {added}"
 
@@ -162,24 +172,6 @@ Definition.funDict.TryAdd ("def", (DTProc ([
     ), OutFP))
 ], 0, None )))
 
-
-(SymbolicExpression.Parse "def(yyds, 1, 1, x, x+1)").Evaluate(dict [])
-(SymbolicExpression.Parse "yyds(123)").Evaluate(dict [])
-
-Definition.funDict.Keys
-Definition.funDict["yyds"]
-
-(SymbolicExpression.Parse "def(yyds, 1, 3, x, x+1, x*2, x/3)").Evaluate(dict [])
-(SymbolicExpression.Parse "yyds(123)").Evaluate(dict [])
-(*
-πÍ≈Á
-//let x = 1
-let f () =
-    let x = 123
-    printfn "%d" x
-f()
-printfn "%d" x
-*)
 (SymbolicExpression.Parse "let(ttc, 789)").Evaluate(dict ["ttc1", FloatingPoint.Real 123.0])
 (SymbolicExpression.Parse "print(123)").Evaluate(dict [])
 
@@ -202,7 +194,46 @@ Definition.funDict.TryAdd ("main", DTProc ([
 ], 0, None))
 (SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
 
+(SymbolicExpression.Parse "def(yyds, 1, 1, x, x+1)").Evaluate(dict [])
+(SymbolicExpression.Parse "yyds(123)").Evaluate(dict [])
 
+(SymbolicExpression.Parse "def(ttc, 1, 1, x, print(x*2))").Evaluate(dict [])
+(SymbolicExpression.Parse "ttc(123)").Evaluate(dict [])
+
+(SymbolicExpression.Parse "def(ttc, 1, 2, x, def(t1,1,1,x,x+100000))").Evaluate(dict [])
+(SymbolicExpression.Parse "ttc(123)").Evaluate(dict [])
+(SymbolicExpression.Parse "t1(123)").Evaluate(dict [])
+
+(SymbolicExpression.Parse "def(ttc, 1, 2, x, def(t1,1,1,x,x+100000), print(x*2))").Evaluate(dict [])
+(SymbolicExpression.Parse "ttc(123)").Evaluate(dict [])
+(SymbolicExpression.Parse "t1(123)").Evaluate(dict [])
+
+
+(SymbolicExpression.Parse "def(ttc, 1, 3, x, def(t1,1,1,x,x+100000), print(x*2), t1(x/3))").Evaluate(dict [])
+
+
+(SymbolicExpression.Parse "def(yyds, 1, 3, x, print(x+1), print(x*2), x/3)").Evaluate(dict [])
+(SymbolicExpression.Parse "yyds(123)").Evaluate(dict [])
+
+(SymbolicExpression.Parse "tttt(123)")
+
+
+
+Definition.funDict.Keys
+Definition.funDict["t1"]
+Definition.funDict["yyds"]
+
+
+
+(*
+πÍ≈Á
+//let x = 1
+let f () =
+    let x = 123
+    printfn "%d" x
+f()
+printfn "%d" x
+*)
 
 
 
@@ -328,7 +359,7 @@ Definition.funDict.TryAdd ("main", DTProc ([
         Infix.parseOrThrow "let(ttc, str(789))"
         Infix.parseOrThrow "print(ttc)"
     ], OutVar [Symbol "ttc"]))
-], 0))
+], 0, None))
 (SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
 
 BigRational.ToDouble(BigRational.FromDecimal 789M).ToString();;
@@ -337,7 +368,9 @@ BigRational.ToDouble(BigRational.FromDecimal 789M).ToString();;
 (SymbolicExpression.Parse "param(xxx, abc)").Evaluate(dict [])
 (SymbolicExpression.Parse "def(param(xxx, yyy), expr(xxx + yyy))").Evaluate(dict [])
 
-
+type A = | AA
+    with
+        member val orz:int with get, set
 
 
 

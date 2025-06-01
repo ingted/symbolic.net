@@ -126,12 +126,13 @@ module Evaluate =
             if x < 0.0 then PosInf else if x > 0.0 then NegInf else Undef
         | PosInf, _ | _, PosInf -> PosInf
         | NegInf, _ | _, NegInf -> NegInf
+        | BR x, BR y -> BR (x*y)
         | BR x, Real y | Real y, BR x -> BR (x*BigRational.FromDecimal (decimal y))
         | BR x, Complex y | Complex y, BR x -> Complex ((complex (BigRational.ToDouble x) 0.0) * y)
 #if TENSOR_SUPPORT
         | Real x, WTensor (DSTensor t) -> WTensor (DSTensor (x * t))
 #endif
-        | _ -> failwith "not supported"
+        | (u_, v_) -> failwith "not supported"
 
     let rec Pow (baseValue: BigRational, exponent: BigRational) : BigRational =
         if exponent.Denominator = BigInteger.One then
@@ -538,6 +539,18 @@ module Evaluate =
             })
         |> Some
 
+    let gCtxAppend (ctx:Map<string, FloatingPoint>) (gCtx:GlobalContext) =
+            {
+                gCtx
+                    with
+                        ctx =
+                            ctx
+                            |> Map.fold (fun s k v ->
+                                s
+                                |> Map.add k v
+                            ) gCtx.ctx
+            }
+
     let gCtxAdd k v (gCtx:GlobalContext) =
             {
                 gCtx
@@ -837,9 +850,9 @@ module Evaluate =
                         elif i = 1 || i = 2 then
                             None
                         elif i = 3 then
-                            Some (sb.SymbolName, exprs[3..pCnt] |> NestedExpr) //name 必在第一位
+                            Some (sb.SymbolName, exprs[3..2 + pCnt] |> NestedExpr) //name 必在第一位
                         elif i = 4 then
-                            Some (sb.SymbolName, exprs[pCnt..pCnt + dCnt] |> NestedExpr)
+                            Some (sb.SymbolName, exprs[3 + pCnt..2 + pCnt + dCnt] |> NestedExpr)
                         else
                             failwith "Invalid fun defined"
                     )
@@ -995,24 +1008,62 @@ module Evaluate =
                                         | OutVar vl ->
                                             updatedProcEnvIt, vl |> List.map (fun s -> getValue s.SymbolName |> snd) |> NestedList
                                     | DBExp (exprList, defOut) ->
+                                        let updatedEnv =
+                                            if procEnv_.prevOutput.IsSome then
+                                                {procEnv_ with stx = updatedStack; }
+                                            else
+                                                {procEnv_ with stx = updatedStack; prevOutput = Some Undef}
+
                                         let rstList, procEnv__ =
                                             exprList
-                                            |> List.fold (fun (rstList_, _procEnv_) a ->
+                                            //|> List.fold (fun (rstList_, _procEnv_) a ->
+                                            |> List.fold (fun (rstList_, (updatedEnv_:ProcEnv)) a ->
                                                 //evaluate2        (ifPrecise, parentScopeIdOpt_, gContext, sContext, symbolValues_, sysVarValueStack_)
-                                                let evalV = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, _procEnv_
+                                                //let updatedEnv_ =
+                                                //    if procEnvOpt.IsNone then
+                                                //        updatedEnv
+                                                //    else
+                                                //        procEnvOpt.Value
+                                                //        //{
+                                                //        //    updatedEnv
+                                                //        //        with
+                                                //        //            sCtx = (sCtxAdd "it" procEnvOpt.Value.prevOutput.Value procEnvOpt.Value.sCtx)
+                                                //        //            prevOutput = procEnvOpt.Value.prevOutput
+                                                //        //}
+                                                
+                                                let evalV = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, updatedEnv_
                                                                                                                         //with
                                                                                                                         //    ifTop = if (parentFxName = "main" && a.FunNameOpt.IsSome && a.FunNameOpt.Value.SymbolName = "let") || (parentFxName = "let" && _procEnv_.ifTop) then true else false}
                                                                         ) a
-                                                let updEnv, evalRst = evalV.ER
-                                                let updatedProcEnv = {
-                                                    updEnv
-                                                        with
-                                                            sCtx = (sCtxAdd "it" evalRst updEnv.sCtx)
-                                                            prevOutput = Some evalRst
-                                                }
 
-                                                (procStepId(), evalV.eRst)::rstList_, updatedProcEnv
-                                            ) ([], {procEnv_ with stx = updatedStack})
+                                                let ifDef =
+                                                    match a with
+                                                    | FunInvocation (Symbol "def", _) -> true
+                                                    | _ -> false
+
+                                                //let updatedProcEnv = {
+                                                //    (if ifDef then _procEnv_ else updEnv)
+                                                //        with
+                                                //            sCtx = (sCtxAdd "it" evalRst updEnv.sCtx)
+                                                //            prevOutput = Some evalRst
+                                                //}
+
+                                                let updatedProcEnv =
+                                                    if ifDef then
+                                                        updatedEnv
+                                                    else
+                                                        let updEnv, evalRst = evalV.ER
+                                                        {
+                                                            updatedEnv
+                                                                with
+                                                                    gCtx = gCtxAppend updEnv.gCtx.ctx updatedEnv.gCtx 
+                                                                    sCtx = sCtxAdd "it" evalRst updEnv.sCtx
+                                                                    prevOutput = Some evalRst
+                                                        }
+                                                        
+
+                                                (procStepId(), evalV.eRst)::rstList_, updatedProcEnv //(Some evalV)
+                                            ) ([], updatedEnv)
 
                                         //scopedContextOpt.Value.ctx["it"] <- fp
 
@@ -1020,7 +1071,9 @@ module Evaluate =
                                         | OutCtx ->
                                             procEnv__, procEnv__.sCtx.Value |> Context
                                         | OutFP ->
-                                            procEnv__, procEnv__.prevOutput.Value
+                                            procEnv__, //if procEnv__.prevOutput.IsNone then Undef else procEnv__.prevOutput.Value
+                                                        //procEnv__.Value.prevOutput.Value //應該要顯式給定 Undef 如果 None 表示一定有問題
+                                                        snd rstList[0]
                                         | OutVar vl ->
                                             procEnv__, vl |> List.map (fun s -> getValueBase procEnv__ s.SymbolName |> snd) |> NestedList
                                     |> EvalRst
@@ -1068,7 +1121,7 @@ module Evaluate =
     let mutable IF_PRECISE = false
 
     [<CompiledName("Evaluate")>]
-    let rec evaluate (symbolValues_:IDictionary<string, FloatingPoint>) =
+    let rec evaluate (symbolValues_:IDictionary<string, FloatingPoint>) v =
         let symbolValues = Map<string, FloatingPoint> (symbolValues_ |> Seq.map (fun kvp -> kvp.Key, kvp.Value))
         //let globalScope _ = ConcurrentDictionary<string, FloatingPoint>() |> Context //供圖靈機 IO
 
@@ -1081,14 +1134,16 @@ module Evaluate =
             procParamArgExpr    = None
             depth               = 0
         }
-        evaluate2 (
+        let result =
+            evaluate2 (
             IF_PRECISE
             , None
             //, gCtx
             //, None
             , symbolValues |> Map.add "funDict" (FD funDict)
             , procEnv
-            )
+            ) v
+        result.eRst
         
     ///Expression 定義的函數，找不到的參數會優先從 evaluate 傳入的 symbol values 查找
     [<CompiledName("Evaluate2_with_dict_svv")>]
