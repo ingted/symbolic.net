@@ -173,6 +173,12 @@ type SymbolicExpression(expression:Expression) =
     // EVALUATION
 
     member this.Evaluate(symbols:System.Collections.Generic.IDictionary<string, FloatingPoint>) = Evaluate.evaluate symbols expression
+    member this.EvaluateNoThrow(symbols:System.Collections.Generic.IDictionary<string, FloatingPoint>) =
+        try
+            Evaluate.evaluate symbols expression |> Choice1Of2
+        with
+        | exn ->
+            Choice2Of2 exn.Message
     member this.EvaluateCorrect(symbols:System.Collections.Generic.IDictionary<string, FloatingPoint>) = Evaluate.evaluate_correct symbols expression
  
 

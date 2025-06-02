@@ -839,20 +839,48 @@ module Evaluate =
                         sb.SymbolName, reRst exprs[i + skip]
                     )
 
-                let exprsInFuncParamEvaluationWithDefParamCount (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) =
+                let exprsInDefAliasFun (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) =
+                    symbols
+                    |> Seq.skip 1
+                    |> Seq.mapi (fun i sb ->
+                        sb.SymbolName, NestedExpr [exprs[i + 1]]
+                    )
+                    |> Seq.append [symbols[0].SymbolName, Str exprs[0].Ident.SymbolName]
+
+                let exprsInFuncParamEvaluationWithDefParamCount (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) (stx:Stack) =
                     let pCnt = exprs[1].int
                     let dCnt = exprs[2].int
                     symbols
                     |> Seq.indexed
                     |> Seq.choose (fun (i, sb) ->
                         if i = 0 then
-                            Some (sb.SymbolName, Str exprs[i].Ident.SymbolName) //reRst exprs[i + skip]
+                            let i0 = exprs[i].Ident.SymbolName
+                            if stx.IsSome && stx.Value.ContainsKey i0 then
+                                Some (sb.SymbolName, stx.Value[i0])
+                            else
+                                Some (sb.SymbolName, Str i0) //reRst exprs[i + skip]
                         elif i = 1 || i = 2 then
                             None
                         elif i = 3 then
-                            Some (sb.SymbolName, exprs[3..2 + pCnt] |> NestedExpr) //name 必在第一位
+                            match exprs[3] with
+                            | Identifier s when pCnt = 1 && stx.IsSome && stx.Value.ContainsKey s.SymbolName ->
+                                match stx.Value[s.SymbolName] with
+                                | NestedExpr [FunInvocation (Symbol "param", paramValueExprList)] ->
+                                    Some (sb.SymbolName, NestedExpr paramValueExprList)
+                                | _ ->
+                                    Some (sb.SymbolName, exprs[3..2 + pCnt] |> NestedExpr)
+                            | _ ->
+                                Some (sb.SymbolName, exprs[3..2 + pCnt] |> NestedExpr) //name 必在第一位
                         elif i = 4 then
-                            Some (sb.SymbolName, exprs[3 + pCnt..2 + pCnt + dCnt] |> NestedExpr)
+                            match exprs[4] with
+                            | Identifier s when dCnt = 1 && stx.IsSome && stx.Value.ContainsKey s.SymbolName ->
+                                match stx.Value[s.SymbolName] with
+                                | NestedExpr [FunInvocation (Symbol "expr", paramValueExprList)] ->
+                                    Some (sb.SymbolName, NestedExpr paramValueExprList)
+                                | _ ->
+                                    Some (sb.SymbolName, exprs[3 + pCnt..2 + pCnt + dCnt] |> NestedExpr)
+                            | _ ->
+                                Some (sb.SymbolName, exprs[3 + pCnt..2 + pCnt + dCnt] |> NestedExpr)
                         else
                             failwith "Invalid fun defined"
                     )
@@ -865,7 +893,11 @@ module Evaluate =
                         if parentFxParamSymbols.Length <> paramValueExprList.Length then
                             failwithf "%s parameter length not matched %A <-> %A" parentFxName parentFxParamSymbols paramValueExprList
 
-                        let evaluatedArgsOfParentCall = exprsInFuncParamEvaluation parentFxParamSymbols paramValueExprList 0
+                        let evaluatedArgsOfParentCall =
+                            if parentFxName = "fun" then
+                                exprsInDefAliasFun parentFxParamSymbols paramValueExprList
+                            else
+                                exprsInFuncParamEvaluation parentFxParamSymbols paramValueExprList 0
                         //sysVarValueStack.Push (Some (ConcurrentDictionary<_, _> (dict evaluatedArgsOfParentCall)))
                         //let updatedStack = dict evaluatedArgsOfParentCall |> CD<_, _> |> Some
                         let updatedStack = Map evaluatedArgsOfParentCall |> Some
@@ -920,7 +952,7 @@ module Evaluate =
                                             //match paramDefCountOpt with
                                             //| Some (pc, dc) ->
                                             if parentFxName = "def" then
-                                                exprsInFuncParamEvaluationWithDefParamCount paramSymbols paramValueExprList_ //ifTop
+                                                exprsInFuncParamEvaluationWithDefParamCount paramSymbols paramValueExprList_ procEnv_.stx //ifTop
                                             //| None ->
                                             else
                                                 exprsInFuncParamEvaluation paramSymbols paramValueExprList_ skip //ifTop

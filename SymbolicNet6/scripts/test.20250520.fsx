@@ -57,6 +57,31 @@ let paramCount = Symbol "paramCnt"
 let def = Symbol "def"
 let defLineCount = Symbol "defLineCount"
 
+Definition.funDict.TryRemove "len"
+Definition.funDict.TryAdd ("len", (DTProc ([
+    [symX], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
+        let stx = provEnv.stx
+        let l =
+            match stx.Value.TryGetValue("x") with
+            | false, _ -> 0.0
+            | true, v ->
+                match v with
+                | NestedExpr l -> l.Length
+                | NestedList l -> l.Length
+                | NestedMap m -> m.Count
+                | _ ->
+                    failwithf "len not supported, %A" v
+
+        let out = {
+            provEnv
+                with
+                    prevOutput = Some (FloatingPoint.Real l)
+        }
+        out
+    ), OutFP))
+], 0, None)))
+
+
 Definition.funDict.TryRemove "let"
 Definition.funDict.TryAdd ("let", (DTProc ([
     [symX; symV], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
@@ -114,9 +139,24 @@ Definition.funDict.TryAdd ("print", (DTProc ([
     ), OutFP))
 ], 0, None)))
 
-Definition.funDict.TryRemove "def"
-Definition.funDict.TryAdd ("def", (DTProc ([
-    [name; paramCount; defCount; paramList; defList], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
+Definition.funDict.TryRemove "printCheck"
+Definition.funDict.TryAdd ("printCheck", (DTProc ([
+    [symX;symY;], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
+        let g = provEnv.gCtx
+        let s = provEnv.sCtx
+        let prevO = provEnv.prevOutput
+        let stx = provEnv.stx
+        let ifTop = provEnv.depth = 0
+        printfn "=> %A" (stx.Value.TryGetValue "x" |> snd)
+        let _, check = stx.Value.TryGetValue "y"
+        if stx.Value.TryGetValue "x" <> stx.Value.TryGetValue "y" then
+            { provEnv with prevOutput = Some (Str $"x <> {check}") }
+        else
+            provEnv
+    ), OutFP))
+], 0, None)))
+
+let defBase (parentScopeIdOpt:System.Guid option) (provEnv:ProcEnv) (symbolValues:SymbolValues) (exprs:Expression list option) =
         let g = provEnv.gCtx
         let s = 
             if provEnv.sCtx.IsSome then
@@ -134,11 +174,12 @@ Definition.funDict.TryAdd ("def", (DTProc ([
         printfn $"ifTop: {ifTop}"
 
         let _, Str funName = stx.Value.TryGetValue name.SymbolName
+        printfn "funName: %s" funName
         let funParam =  pList |>List.map (fun e -> e.Ident)
         printfn "pList: %A" pList
         //let funDef =  dList
 
-        //let ctx =
+        //let ctx =X
         //    if ifTop then
         //        s.ctx
         //    else
@@ -169,7 +210,13 @@ Definition.funDict.TryAdd ("def", (DTProc ([
                 {out with sCtx = sCtxAdd "funDict" (FD fd) (Some s)}
         effected
         //provEnv
-    ), OutFP))
+
+
+
+
+Definition.funDict.TryRemove "def"
+Definition.funDict.TryAdd ("def", (DTProc ([
+    [name; paramCount; defCount; paramList; defList], (DBFun (defBase, OutFP))
 ], 0, None )))
 
 (SymbolicExpression.Parse "let(ttc, 789)").Evaluate(dict ["ttc1", FloatingPoint.Real 123.0])
@@ -197,26 +244,29 @@ Definition.funDict.TryAdd ("main", DTProc ([
 //55a82fb8d6e0a188c7dfff2ae3c18d4459b8cc4d
 //這個 commit def 內的 def 一樣會定義在 depth = 0，所以出來繼續用，接下來要改成 def 內的只在 def 內生效
 (SymbolicExpression.Parse "def(yyds, 1, 1, x, x+1)").Evaluate(dict [])
-(SymbolicExpression.Parse "yyds(123)").Evaluate(dict [])
+if (SymbolicExpression.Parse "yyds(123)").Evaluate(dict []) <> BR 124N then failwith "failed 0001"
 
-(SymbolicExpression.Parse "def(ttc, 1, 1, x, print(x*2))").Evaluate(dict [])
-(SymbolicExpression.Parse "ttc(123)").Evaluate(dict [])
+(SymbolicExpression.Parse "def(ttc, 1, 1, x, printCheck(x*2, 246))").Evaluate(dict [])
+if (SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) <> Undef then failwith "failed 0002"
+
+let chk (cond) s (f) = if f <> cond then failwith s
+
 
 (SymbolicExpression.Parse "def(ttc, 1, 2, x, def(t1,1,1,x,x+100000))").Evaluate(dict [])
-(SymbolicExpression.Parse "ttc(123)").Evaluate(dict [])
-(SymbolicExpression.Parse "t1(123)").Evaluate(dict [])
+(SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) |> chk Undef "failed 0003"
+(SymbolicExpression.Parse "t1(123)").Evaluate(dict []) |> chk (BR 100123N) "failed 0004"
 
-(SymbolicExpression.Parse "def(ttc, 1, 2, x, def(t1,1,1,x,x+100000), print(x*2))").Evaluate(dict [])
-(SymbolicExpression.Parse "ttc(123)").Evaluate(dict [])
-(SymbolicExpression.Parse "t1(123)").Evaluate(dict [])
+(SymbolicExpression.Parse "def(ttc, 1, 2, x, def(t1,1,1,x,x+100000), printCheck(x*2, 246))").Evaluate(dict [])
+(SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) |> chk Undef "failed 0005"
+(SymbolicExpression.Parse "t1(123)").Evaluate(dict []) |> chk (BR 100123N) "failed 0006"
 
 
 (SymbolicExpression.Parse "def(ttc, 1, 3, x, def(t1,1,1,x,x+100000), print(x*2), t1(x/3))").Evaluate(dict [])
-(SymbolicExpression.Parse "ttc(123)").Evaluate(dict [])
-(SymbolicExpression.Parse "t1(123)").Evaluate(dict [])
+(SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) |> chk (BR 100041N) "failed 0007"
+(SymbolicExpression.Parse "t1(123)").Evaluate(dict []) |> chk (BR 100123N) "failed 0008"
 
-(SymbolicExpression.Parse "def(yyds, 1, 3, x, print(x+1), print(x*2), x/3)").Evaluate(dict [])
-(SymbolicExpression.Parse "yyds(123)").Evaluate(dict [])
+(SymbolicExpression.Parse "def(yyds, 1, 3, x, printCheck(x+1, 124), printCheck(x*2, 246), x/3)").Evaluate(dict [])
+(SymbolicExpression.Parse "yyds(123)").Evaluate(dict []) |> chk (BR 41N) "failed 0009"
 
 (SymbolicExpression.Parse "tttt(123)")
 
@@ -237,10 +287,10 @@ Definition.funDict.TryAdd ("main", DTProc ([
         Infix.parseOrThrow "def(ttc, 2, 3, x, y, def(t1,1,1,x,x+100000), print(x*2), t1(x + y/3))"
         Infix.parseOrThrow "print(ttc(ttc1, 9))"
         Infix.parseOrThrow "let(gg,ttc(ttc1, 9))"
-        Infix.parseOrThrow "print(gg)"
+        Infix.parseOrThrow "printCheck(gg, 100792)"
     ], OutFP))
 ], 0, None))
-(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0]) |> chk Undef "failed 0010"
 
 
 
@@ -266,7 +316,7 @@ Definition.funDict.TryAdd ("main", DTProc ([
         Infix.parseOrThrow "print(gg)"
     ], OutVar [Symbol "gg"]))
 ], 0, None))
-(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0]) |> chk (NestedList [BR 100805N]) "failed 0010"
 
 
 
@@ -291,6 +341,97 @@ let f () =
 f()
 printfn "%d" x
 *)
+
+
+
+
+
+Definition.funDict.TryRemove "main"
+Definition.funDict.TryAdd ("main", DTProc ([
+    [], (DBExp ([
+        Infix.parseOrThrow "let(ttc, str(789))"
+        Infix.parseOrThrow "print(ttc)"
+    ], OutVar [Symbol "ttc"]))
+], 0, None))
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+
+BigRational.ToDouble(BigRational.FromDecimal 789M).ToString();;
+
+(SymbolicExpression.Parse "len(expr(xxx + yyy, abc))").Evaluate(dict [])
+(SymbolicExpression.Parse "len(param(xxx, abc))").Evaluate(dict [])
+
+
+
+let _ =
+    define "fun" ([Symbol "name1"; Symbol "paramList1"; Symbol "exprList1"],
+        SymbolicExpression.XParse "def(name1, 1, 1, paramList1, exprList1)")
+
+(SymbolicExpression.Parse "fun(yyds1, param(x), expr(x+1))").Evaluate(dict [])
+(SymbolicExpression.Parse "yyds1(123)").Evaluate(dict []) |> chk (BR 124N) "failed 0011"
+
+(SymbolicExpression.Parse "fun(yyds1, param(x, y), expr(x+1+y))").Evaluate(dict [])
+(SymbolicExpression.Parse "yyds1(123, 6)").Evaluate(dict []) |> chk (BR 130N) "failed 0012"
+
+(SymbolicExpression.Parse "fun(yyds1, param(x), expr(x+1+y))").Evaluate(dict [])
+(SymbolicExpression.Parse "yyds1(123)").Evaluate(dict ["y", BR 16N]) |> chk (BR 140N) "failed 0013"
+
+(SymbolicExpression.Parse "fun(yyds1, x, expr(x+1+y))").Evaluate(dict [])
+(SymbolicExpression.Parse "yyds1(123)").EvaluateNoThrow(dict ["y", BR 16N]) |> chk (Choice2Of2 ("Failed to find symbol x")) "failed 0014"
+
+
+(*
++		["exprList"]	NestedExpr [FunInvocation (Symbol "expr", [Sum [Number 1N; Identifier (Symbol ...); ...]; ...]); ...]	
++		["name"]	Str "yyds1"	
++		["paramList"]	NestedExpr [FunInvocation (Symbol "param", [Identifier (Symbol "x")])]	
+
+
+*)
+
+
+Definition.funDict.Keys |> Seq.toArray
+Definition.funDict["fun"]
+Definition.funDict["name"]
+
+Definition.funDict.TryRemove "fun"
+Definition.funDict.TryAdd ("fun", (DTProc ([
+
+    [Symbol "name"; Symbol "params"; Symbol "defs"], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
+
+        let stx = provEnv.stx
+
+        // 取得 param list
+        let _, NestedExpr paramList = stx.Value.TryGetValue("params")
+        let paramSyms = paramList |> List.map (function Identifier sym -> sym | _ -> failwith "Only Ident allowed in param")
+
+        // 取得 def body list
+        let _, NestedExpr defList = stx.Value.TryGetValue("defs")
+
+        // 用 GUID 或 hash 當 def 名稱，避免重名污染
+        let defName = System.Guid.NewGuid().ToString("N")
+
+        let defExpr =
+            FunInvocation
+                (Symbol "def",
+                 [
+                     Str defName
+                     Number (paramList.Length |> bigint)
+                     Number (defList.Length |> bigint)
+                     NestedExpr paramList
+                     NestedExpr defList
+                 ])
+
+        // 呼叫 def(...) 建立函數
+        let _ = Evaluate.eval provEnv defExpr
+
+        // 回傳該名稱對應的 FuncVal
+        let lookup = Function(Symbol defName, paramList)
+        Evaluate.eval provEnv lookup
+    ), OutFP))
+
+], 0, None)))
+
+
+
 
 
 
@@ -410,20 +551,11 @@ let outputCode =
 
 
 
-Definition.funDict.TryRemove "main"
-Definition.funDict.TryAdd ("main", DTProc ([
-    [], (DBExp ([
-        Infix.parseOrThrow "let(ttc, str(789))"
-        Infix.parseOrThrow "print(ttc)"
-    ], OutVar [Symbol "ttc"]))
-], 0, None))
-(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
 
-BigRational.ToDouble(BigRational.FromDecimal 789M).ToString();;
 
-(SymbolicExpression.Parse "expr(xxx + yyy, abc)").Evaluate(dict [])
-(SymbolicExpression.Parse "param(xxx, abc)").Evaluate(dict [])
-(SymbolicExpression.Parse "def(param(xxx, yyy), expr(xxx + yyy))").Evaluate(dict [])
+
+
+(SymbolicExpression.Parse "fun(param(xxx, yyy), expr(xxx + yyy))").Evaluate(dict [])
 
 type A = | AA
     with

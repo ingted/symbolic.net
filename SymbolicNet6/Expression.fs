@@ -152,6 +152,11 @@ and [<NoComparison>] FloatingPoint =
         match x with
         | NestedExpr c -> c
 
+    member x.isNestedExpr =
+        match x with
+        | NestedExpr _ -> true
+        | _ -> false
+
     member x.RealValue =
         match x with
         | Real x -> x
