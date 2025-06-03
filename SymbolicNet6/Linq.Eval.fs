@@ -1153,8 +1153,7 @@ module Evaluate =
 
     let mutable IF_PRECISE = false
 
-    [<CompiledName("Evaluate")>]
-    let rec evaluate (symbolValues_:IDictionary<string, FloatingPoint>) v =
+    let rec evaluateBase (symbolValues_:IDictionary<string, FloatingPoint>) v =
         let symbolValues = Map<string, FloatingPoint> (symbolValues_ |> Seq.map (fun kvp -> kvp.Key, kvp.Value))
         //let globalScope _ = ConcurrentDictionary<string, FloatingPoint>() |> Context //供圖靈機 IO
 
@@ -1176,8 +1175,12 @@ module Evaluate =
             , symbolValues |> Map.add "funDict" (FD funDict)
             , procEnv
             ) v
-        result.eRst
-        
+        result
+
+    [<CompiledName("Evaluate")>]
+    let rec evaluate (symbolValues_:IDictionary<string, FloatingPoint>) v =
+        (evaluateBase symbolValues_ v).eRst
+
     ///Expression 定義的函數，找不到的參數會優先從 evaluate 傳入的 symbol values 查找
     [<CompiledName("Evaluate2_with_dict_svv")>]
     let rec evaluate2_with_dict_svv (symbolValues:ConcurrentDictionary<string, FloatingPoint>, sysVarValuesOpt:IDictionary<string, FloatingPoint> option) = function

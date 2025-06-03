@@ -102,11 +102,17 @@ Definition.funDict.TryAdd ("let", (DTProc ([
                 with
                     prevOutput = Some Undef
         }
+        let vName = exprs.Value[0].Ident.SymbolName
         let effected =
             if ifTop then
-                {out with gCtx = gCtxAdd exprs.Value[0].Ident.SymbolName stxVal_v out.gCtx}
+                {out with
+                    gCtx = gCtxAdd vName stxVal_v out.gCtx
+                    sCtx = sCtxAdd vName stxVal_v out.sCtx
+                    }
             else
-                {out with sCtx = sCtxAdd exprs.Value[0].Ident.SymbolName stxVal_v out.sCtx}
+                {out with
+                    sCtx = sCtxAdd vName stxVal_v out.sCtx
+                    }
         effected
         
     ), OutFP))
@@ -379,6 +385,10 @@ let _ =
 (SymbolicExpression.Parse "yyds1(123)").EvaluateNoThrow(dict ["y", BR 16N]) |> chk (Choice2Of2 ("Failed to find symbol x")) "failed 0014"
 
 
+(SymbolicExpression.Parse "let(x,expr(x,123))").EvaluateBase(dict ["x", BR 1478N]).eEnv.sCtx.Value.ctx["x"] |> chk (NestedExpr [Identifier (Symbol "x"); Number 123N]) "failed 0015"
+
+(SymbolicExpression.Parse "let(x,x)").EvaluateBase(dict ["x", BR 1478N]).eEnv.sCtx.Value.ctx["x"] |> chk (BR 1478N) "failed 0016"
+
 (*
 +		["exprList"]	NestedExpr [FunInvocation (Symbol "expr", [Sum [Number 1N; Identifier (Symbol ...); ...]; ...]); ...]	
 +		["name"]	Str "yyds1"	
@@ -391,47 +401,6 @@ let _ =
 Definition.funDict.Keys |> Seq.toArray
 Definition.funDict["fun"]
 Definition.funDict["name"]
-
-Definition.funDict.TryRemove "fun"
-Definition.funDict.TryAdd ("fun", (DTProc ([
-
-    [Symbol "name"; Symbol "params"; Symbol "defs"], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
-
-        let stx = provEnv.stx
-
-        // 取得 param list
-        let _, NestedExpr paramList = stx.Value.TryGetValue("params")
-        let paramSyms = paramList |> List.map (function Identifier sym -> sym | _ -> failwith "Only Ident allowed in param")
-
-        // 取得 def body list
-        let _, NestedExpr defList = stx.Value.TryGetValue("defs")
-
-        // 用 GUID 或 hash 當 def 名稱，避免重名污染
-        let defName = System.Guid.NewGuid().ToString("N")
-
-        let defExpr =
-            FunInvocation
-                (Symbol "def",
-                 [
-                     Str defName
-                     Number (paramList.Length |> bigint)
-                     Number (defList.Length |> bigint)
-                     NestedExpr paramList
-                     NestedExpr defList
-                 ])
-
-        // 呼叫 def(...) 建立函數
-        let _ = Evaluate.eval provEnv defExpr
-
-        // 回傳該名稱對應的 FuncVal
-        let lookup = Function(Symbol defName, paramList)
-        Evaluate.eval provEnv lookup
-    ), OutFP))
-
-], 0, None)))
-
-
-
 
 
 
