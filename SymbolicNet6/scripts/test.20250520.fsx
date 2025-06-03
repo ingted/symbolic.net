@@ -57,10 +57,12 @@ let paramCount = Symbol "paramCnt"
 let def = Symbol "def"
 let defLineCount = Symbol "defLineCount"
 
+let chk (cond) s (f) = if f <> cond then failwith s
+
 Definition.funDict.TryRemove "len"
 Definition.funDict.TryAdd ("len", (DTProc ([
-    [symX], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
-        let stx = provEnv.stx
+    [symX], (DBFun ((fun parentScopeIdOpt procEnv symbolValues exprs ->
+        let stx = procEnv.stx
         let l =
             match stx.Value.TryGetValue("x") with
             | false, _ -> 0.0
@@ -73,7 +75,7 @@ Definition.funDict.TryAdd ("len", (DTProc ([
                     failwithf "len not supported, %A" v
 
         let out = {
-            provEnv
+            procEnv
                 with
                     prevOutput = Some (FloatingPoint.Real l)
         }
@@ -84,12 +86,12 @@ Definition.funDict.TryAdd ("len", (DTProc ([
 
 Definition.funDict.TryRemove "let"
 Definition.funDict.TryAdd ("let", (DTProc ([
-    [symX; symV], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
-        let g = provEnv.gCtx
-        let s = provEnv.sCtx
-        let prevO = provEnv.prevOutput
-        let stx = provEnv.stx
-        let ifTop = provEnv.depth = 0
+    [symX; symV], (DBFun ((fun parentScopeIdOpt procEnv symbolValues exprs ->
+        let g = procEnv.gCtx
+        let s = procEnv.sCtx
+        let prevO = procEnv.prevOutput
+        let stx = procEnv.stx
+        let ifTop = procEnv.depth = 0
         //stx.Value.TryGetValue "x" |> printfn "%A"
         exprs.Value[0] |> printfn "exprs[0]: %A"
         exprs.Value[0].Ident.SymbolName |> printfn "exprs.Value[0].Ident.SymbolName: %A"
@@ -98,7 +100,7 @@ Definition.funDict.TryAdd ("let", (DTProc ([
         //effectIn[exprs.Value[0].Ident.SymbolName] <- stxVal_v
         printfn "stxId: %A" stxVal_v
         let out = {
-            provEnv
+            procEnv
                 with
                     prevOutput = Some Undef
         }
@@ -107,11 +109,11 @@ Definition.funDict.TryAdd ("let", (DTProc ([
             if ifTop then
                 {out with
                     gCtx = gCtxAdd vName stxVal_v out.gCtx
-                    sCtx = sCtxAdd vName stxVal_v out.sCtx
+                    sCtx = sCtxAdd parentScopeIdOpt vName stxVal_v out.sCtx
                     }
             else
                 {out with
-                    sCtx = sCtxAdd vName stxVal_v out.sCtx
+                    sCtx = sCtxAdd parentScopeIdOpt vName stxVal_v out.sCtx
                     }
         effected
         
@@ -132,46 +134,80 @@ Definition.funDict.TryAdd ("let", (DTProc ([
 ], 1, None)))
 
 
+Definition.funDict.TryRemove "eval"
+Definition.funDict.TryAdd ("eval", (DTProc ([
+    [symX], (DBFun ((fun parentScopeIdOpt procEnv symbolValues exprs ->
+        let stx = procEnv.stx
+        let ifTop = procEnv.depth = 0
+        printfn $"ifTop: {ifTop}"
+        //printfn "symbolValues: %A" symbolValues
+        //printfn "=============================="
+        let stxVal_v = stx.Value.TryGetValue(symX.SymbolName) |> snd
+        match stxVal_v with
+        | NestedExpr l ->
+            let dp = DTProc ([[], DBExp (l, OutFP)], 0, None)
+            let gid = System.Guid.NewGuid().ToString().Replace("-", "")
+            let rm = Definition.funDict.TryRemove gid
+            let add = Definition.funDict.TryAdd (gid, dp)
+            let evaluated = evaluate2 (Evaluate.IF_PRECISE, parentScopeIdOpt, symbolValues, {procEnv with stx = Some (procEnv.stx.Value |> Map.remove symX.SymbolName)}) (FunInvocation (Symbol gid, []))
+            {
+                evaluated.eEnv
+                    with
+                        prevOutput = Some evaluated.eRst
+            }
+        | _ ->
+            failwith "Not NestedExpr to evaluate"
+    ), OutFP))
+], 0, None)))
+
+(SymbolicExpression.Parse "eval(expr(x,123))").Evaluate(dict ["x", BR 1478N]) |> chk (BR 123N) "eval001 failed"
+(SymbolicExpression.Parse "eval(expr(x))").Evaluate(dict ["x", BR 1478N]) |> chk (BR 1478N) "eval002 failed"
+
+(SymbolicExpression.Parse "eval(x)").EvaluateNoThrow(dict ["x", BR 1478N]) |> chk (Choice2Of2 "Not NestedExpr to evaluate")  "eval003 failed"
+(SymbolicExpression.Parse "eval(x)").EvaluateNoThrow(dict ["x", NestedExpr [Identifier (Symbol "x")]]) |> chk (Choice1Of2 (NestedExpr [Identifier (Symbol "x")]))  "eval004 failed"
+(SymbolicExpression.Parse "eval(x)").EvaluateNoThrow(dict ["x", NestedExpr [Identifier (Symbol "y")]; "y", BR 7788N]) |> chk (Choice1Of2 (BR 7788N))  "eval005 failed"
+
+
 Definition.funDict.TryRemove "print"
 Definition.funDict.TryAdd ("print", (DTProc ([
-    [symX;], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
-        let g = provEnv.gCtx
-        let s = provEnv.sCtx
-        let prevO = provEnv.prevOutput
-        let stx = provEnv.stx
-        let ifTop = provEnv.depth = 0
+    [symX;], (DBFun ((fun parentScopeIdOpt procEnv symbolValues exprs ->
+        let g = procEnv.gCtx
+        let s = procEnv.sCtx
+        let prevO = procEnv.prevOutput
+        let stx = procEnv.stx
+        let ifTop = procEnv.depth = 0
         printfn "=> %A" (stx.Value.TryGetValue "x" |> snd)
-        provEnv
+        procEnv
     ), OutFP))
 ], 0, None)))
 
 Definition.funDict.TryRemove "printCheck"
 Definition.funDict.TryAdd ("printCheck", (DTProc ([
-    [symX;symY;], (DBFun ((fun parentScopeIdOpt provEnv symbolValues exprs ->
-        let g = provEnv.gCtx
-        let s = provEnv.sCtx
-        let prevO = provEnv.prevOutput
-        let stx = provEnv.stx
-        let ifTop = provEnv.depth = 0
+    [symX;symY;], (DBFun ((fun parentScopeIdOpt procEnv symbolValues exprs ->
+        let g = procEnv.gCtx
+        let s = procEnv.sCtx
+        let prevO = procEnv.prevOutput
+        let stx = procEnv.stx
+        let ifTop = procEnv.depth = 0
         printfn "=> %A" (stx.Value.TryGetValue "x" |> snd)
         let _, check = stx.Value.TryGetValue "y"
         if stx.Value.TryGetValue "x" <> stx.Value.TryGetValue "y" then
-            { provEnv with prevOutput = Some (Str $"x <> {check}") }
+            { procEnv with prevOutput = Some (Str $"x <> {check}") }
         else
-            provEnv
+            procEnv
     ), OutFP))
 ], 0, None)))
 
-let defBase (parentScopeIdOpt:System.Guid option) (provEnv:ProcEnv) (symbolValues:SymbolValues) (exprs:Expression list option) =
-        let g = provEnv.gCtx
+let defBase (parentScopeIdOpt:System.Guid option) (procEnv:ProcEnv) (symbolValues:SymbolValues) (exprs:Expression list option) =
+        let g = procEnv.gCtx
         let s = 
-            if provEnv.sCtx.IsSome then
-                provEnv.sCtx.Value
+            if procEnv.sCtx.IsSome then
+                procEnv.sCtx.Value
             else
                 NamedContext.New(parentScopeIdOpt, None)
-        let prevO = provEnv.prevOutput
-        let stx = provEnv.stx
-        let ifTop = provEnv.depth = 0
+        let prevO = procEnv.prevOutput
+        let stx = procEnv.stx
+        let ifTop = procEnv.depth = 0
         let _, (NestedExpr pList) = stx.Value.TryGetValue paramList.SymbolName
         let _, (NestedExpr dList) = stx.Value.TryGetValue defList.SymbolName
         pList |> printfn "%A"
@@ -207,15 +243,15 @@ let defBase (parentScopeIdOpt:System.Guid option) (provEnv:ProcEnv) (symbolValue
 
         printfn $"removed: {removed}, added: {added}"
 
-        let out = provEnv
+        let out = procEnv
 
         let effected =
             if ifTop then
                 out
             else
-                {out with sCtx = sCtxAdd "funDict" (FD fd) (Some s)}
+                {out with sCtx = sCtxAdd parentScopeIdOpt "funDict" (FD fd) (Some s)}
         effected
-        //provEnv
+        //procEnv
 
 
 
@@ -255,7 +291,7 @@ if (SymbolicExpression.Parse "yyds(123)").Evaluate(dict []) <> BR 124N then fail
 (SymbolicExpression.Parse "def(ttc, 1, 1, x, printCheck(x*2, 246))").Evaluate(dict [])
 if (SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) <> Undef then failwith "failed 0002"
 
-let chk (cond) s (f) = if f <> cond then failwith s
+
 
 
 (SymbolicExpression.Parse "def(ttc, 1, 2, x, def(t1,1,1,x,x+100000))").Evaluate(dict [])
@@ -388,6 +424,9 @@ let _ =
 (SymbolicExpression.Parse "let(x,expr(x,123))").EvaluateBase(dict ["x", BR 1478N]).eEnv.sCtx.Value.ctx["x"] |> chk (NestedExpr [Identifier (Symbol "x"); Number 123N]) "failed 0015"
 
 (SymbolicExpression.Parse "let(x,x)").EvaluateBase(dict ["x", BR 1478N]).eEnv.sCtx.Value.ctx["x"] |> chk (BR 1478N) "failed 0016"
+
+
+
 
 (*
 +		["exprList"]	NestedExpr [FunInvocation (Symbol "expr", [Sum [Number 1N; Identifier (Symbol ...); ...]; ...]); ...]	

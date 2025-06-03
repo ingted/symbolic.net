@@ -526,9 +526,26 @@ module Evaluate =
 
     let eRst (f:FloatingPoint) = f.eRst
 
-    let sCtxAdd k v (sCtx:ScopedContext) =
+    let sCtxAppend (parentScopeIdOpt: Guid option) (ctx:Map<string, FloatingPoint>) (sCtx:ScopedContext) =
         if sCtx.IsNone then
-            NamedContext.New(None, Map [k, v] |> Some)
+            NamedContext.New(parentScopeIdOpt, ctx |> Some)
+        else
+            ({
+                sCtx.Value
+                    with
+                        ctx =
+                            ctx
+                            |> Map.fold (fun s k v ->
+                                s
+                                |> Map.add k v
+                            ) sCtx.Value.ctx
+            })
+        |> Some
+
+
+    let sCtxAdd (parentScopeIdOpt: Guid option) k v (sCtx:ScopedContext) =
+        if sCtx.IsNone then
+            NamedContext.New(parentScopeIdOpt, Map [k, v] |> Some)
         else
             ({
                 sCtx.Value
@@ -539,26 +556,48 @@ module Evaluate =
             })
         |> Some
 
-    let gCtxAppend (ctx:Map<string, FloatingPoint>) (gCtx:GlobalContext) =
-            {
-                gCtx
+    let sCtxRm (parentScopeIdOpt: Guid option) k (sCtx:ScopedContext) =
+        if sCtx.IsNone then
+            NamedContext.New(parentScopeIdOpt, Map [] |> Some)
+        else
+            ({
+                sCtx.Value
                     with
                         ctx =
-                            ctx
-                            |> Map.fold (fun s k v ->
-                                s
-                                |> Map.add k v
-                            ) gCtx.ctx
-            }
+                            sCtx.Value.ctx
+                            |> Map.remove k
+            })
+        |> Some
+
+    let gCtxAppend (ctx:Map<string, FloatingPoint>) (gCtx:GlobalContext) =
+        {
+            gCtx
+                with
+                    ctx =
+                        ctx
+                        |> Map.fold (fun s k v ->
+                            s
+                            |> Map.add k v
+                        ) gCtx.ctx
+        }
 
     let gCtxAdd k v (gCtx:GlobalContext) =
-            {
-                gCtx
-                    with
-                        ctx =
-                            gCtx.ctx
-                            |> Map.add k v
-            }
+        {
+            gCtx
+                with
+                    ctx =
+                        gCtx.ctx
+                        |> Map.add k v
+        }
+
+    let gCtxRm k (gCtx:GlobalContext) =
+        {
+            gCtx
+                with
+                    ctx =
+                        gCtx.ctx
+                        |> Map.remove k
+        }
 
 
     [<CompiledName("Evaluate2")>]
@@ -605,15 +644,15 @@ module Evaluate =
 
         let inline getValueBase (procEnv_:ProcEnv) s =
             match getStackValue procEnv_ s with
-            | Some v -> 0, v
+            | Some v -> 3, v
             | None ->
                 match getScopedContextValue procEnv_ s with
-                | Some v -> 1, v
+                | Some v -> 2, v
                 | None ->
                     match getGlobalContextValue procEnv_ s with
-                    | Some v -> 2, v
+                    | Some v -> 1, v
                     | None ->
-                        3, getPassedInSymbolValue s
+                        0, getPassedInSymbolValue s
 
         let getValue s = getValueBase procEnv s 
 
@@ -822,10 +861,10 @@ module Evaluate =
                 let sCtxFF = scopeCtxNew parentScopeIdOpt 
                 let depth, fd =
                     match (getValue "funDict") with
-                    | 3, f
-                    | 2, f ->
-                        procEnv.depth, f.funDict
+                    | 0, f
                     | 1, f ->
+                        procEnv.depth, f.funDict
+                    | 2, f ->
                         procEnv.depth + 1, f.funDict
                     | _, f ->
                         failwith "Invalid funDict"
@@ -1015,20 +1054,20 @@ module Evaluate =
                                         //                    prevOutput = updatedProcEnv_.prevOutput |> Option.map (fun o -> rstIt o)
                                         //        }
 
-                                        let sCtx = 
-                                            if updatedProcEnv.sCtx.IsSome then
-                                                updatedProcEnv.sCtx
-                                            else
-                                                NamedContext.New(parentScopeIdOpt, None) |> Some
+                                        //let sCtx = 
+                                        //    if updatedProcEnv.sCtx.IsSome then
+                                        //        updatedProcEnv.sCtx
+                                        //    else
+                                        //        NamedContext.New(parentScopeIdOpt, None) |> Some
 
                                         let updatedProcEnvIt = {
                                             updatedProcEnv
                                                 with
                                                     sCtx =
                                                         if updatedProcEnv.prevOutput.IsSome then
-                                                            (sCtxAdd "it" updatedProcEnv.prevOutput.Value sCtx)
+                                                            (sCtxAdd parentScopeIdOpt "it" updatedProcEnv.prevOutput.Value updatedProcEnv.sCtx)
                                                         else
-                                                            (sCtxAdd "it" Undef sCtx)
+                                                            (sCtxAdd parentScopeIdOpt "it" Undef updatedProcEnv.sCtx)
                                         }
                                         match defOut with
                                         | OutCtx ->
@@ -1051,35 +1090,12 @@ module Evaluate =
                                             exprList
                                             //|> List.fold (fun (rstList_, _procEnv_) a ->
                                             |> List.fold (fun (rstList_, (updatedEnv_:ProcEnv)) a ->
-                                                //evaluate2        (ifPrecise, parentScopeIdOpt_, gContext, sContext, symbolValues_, sysVarValueStack_)
-                                                //let updatedEnv_ =
-                                                //    if procEnvOpt.IsNone then
-                                                //        updatedEnv
-                                                //    else
-                                                //        procEnvOpt.Value
-                                                //        //{
-                                                //        //    updatedEnv
-                                                //        //        with
-                                                //        //            sCtx = (sCtxAdd "it" procEnvOpt.Value.prevOutput.Value procEnvOpt.Value.sCtx)
-                                                //        //            prevOutput = procEnvOpt.Value.prevOutput
-                                                //        //}
-                                                
-                                                let evalV = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, updatedEnv_
-                                                                                                                        //with
-                                                                                                                        //    ifTop = if (parentFxName = "main" && a.FunNameOpt.IsSome && a.FunNameOpt.Value.SymbolName = "let") || (parentFxName = "let" && _procEnv_.ifTop) then true else false}
-                                                                        ) a
+                                                let evalV = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, updatedEnv_) a
 
                                                 let ifDef =
                                                     match a with
                                                     | FunInvocation (Symbol "def", _) -> true
                                                     | _ -> false
-
-                                                //let updatedProcEnv = {
-                                                //    (if ifDef then _procEnv_ else updEnv)
-                                                //        with
-                                                //            sCtx = (sCtxAdd "it" evalRst updEnv.sCtx)
-                                                //            prevOutput = Some evalRst
-                                                //}
 
                                                 let updatedProcEnv =
                                                     if ifDef then
@@ -1090,23 +1106,18 @@ module Evaluate =
                                                             updatedEnv
                                                                 with
                                                                     gCtx = gCtxAppend updEnv.gCtx.ctx updatedEnv.gCtx 
-                                                                    sCtx = sCtxAdd "it" evalRst updEnv.sCtx
+                                                                    sCtx = sCtxAdd parentScopeIdOpt "it" evalRst updEnv.sCtx
                                                                     prevOutput = Some evalRst
                                                         }
-                                                        
 
                                                 (procStepId(), evalV.eRst)::rstList_, updatedProcEnv //(Some evalV)
                                             ) ([], updatedEnv)
-
-                                        //scopedContextOpt.Value.ctx["it"] <- fp
 
                                         match defOut with
                                         | OutCtx ->
                                             procEnv__, procEnv__.sCtx.Value |> Context
                                         | OutFP ->
-                                            procEnv__, //if procEnv__.prevOutput.IsNone then Undef else procEnv__.prevOutput.Value
-                                                        //procEnv__.Value.prevOutput.Value //應該要顯式給定 Undef 如果 None 表示一定有問題
-                                                        snd rstList[0]
+                                            procEnv__, snd rstList[0]
                                         | OutVar vl ->
                                             procEnv__, vl |> List.map (fun s -> getValueBase procEnv__ s.SymbolName |> snd) |> NestedList
                                     |> EvalRst
@@ -1116,7 +1127,7 @@ module Evaluate =
 
                         let finalOutput =
                                 evalProc     procList {procEnv with depth = depth}      (Some paramValueExprList)   (procStepId())
-                                //evalProc     procList  procEnv                          (Some paramValueExprList)   (procStepId())
+
                         finalOutput
                        
                     | DTFunI1toI1 f ->
