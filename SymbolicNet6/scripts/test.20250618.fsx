@@ -145,7 +145,24 @@ Definition.funDict.TryAdd ("eval", (DTProc ([
         //printfn "symbolValues: %A" symbolValues
         //printfn "=============================="
         let stxVal_v = stx.Value.TryGetValue(symX.SymbolName) |> snd
-        let fd = stx.Value["funDict"].funDict
+        //let fd = stx.Value["funDict"].funDict
+
+        //let s = 
+        //    if procEnv.sCtx.IsSome then
+        //        procEnv.sCtx.Value
+        //    else
+        //        NamedContext.New(parentScopeIdOpt, None)
+        let fd, ss =
+            if ifTop then
+                Definition.funDict, procEnv.sCtx
+            else
+                if procEnv.sCtx.IsSome && procEnv.sCtx.Value.ctx.ContainsKey "funDict" then
+                    procEnv.sCtx.Value.ctx["funDict"].funDict, procEnv.sCtx
+                else
+                    printfn "scoped context not have FD"
+                    let nfd = new FunDict()
+                    nfd, sCtxAdd parentScopeIdOpt "funDict" (FD nfd) procEnv.sCtx
+
         match stxVal_v with
         | NestedExpr l ->
             //printfn "eval l: %A" l
@@ -156,7 +173,11 @@ Definition.funDict.TryAdd ("eval", (DTProc ([
             //printfn "eval procEnv.stx %A" procEnv.stx.Value
             //printfn "eval procEnv.stx.funDict %A" (procEnv.stx.Value["funDict"].funDict |> Seq.toArray)
             try
-                let evaluated = evaluate2 (Evaluate.IF_PRECISE, parentScopeIdOpt, symbolValues, {procEnv with stx = Some (procEnv.stx.Value |> Map.remove symX.SymbolName)}) (FunInvocation (Symbol gid, []))
+                let evaluated = evaluate2 (Evaluate.IF_PRECISE, parentScopeIdOpt, symbolValues, {
+                                                                                                    procEnv
+                                                                                                        with
+                                                                                                            sCtx = ss
+                                                                                                            stx = Some (procEnv.stx.Value |> Map.remove symX.SymbolName)}) (FunInvocation (Symbol gid, []))
                 {
                     evaluated.eEnv
                         with

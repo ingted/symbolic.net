@@ -882,19 +882,19 @@ module Evaluate =
                     | 0, f -> //getPassedInSymbolValue
                     //| 1, f -> //getGlobalContextValue
                         procEnv.depth, f.funDict
-                    | d, f when d >= 3 -> //getScopedContextValue
+                    | d, f when d = 2 -> //getScopedContextValue
                         procEnv.depth + depthDeltaDefFunConsidered, f.funDict
                     | _, f -> //如果是3，則 getStackValue
                         failwith "Invalid funDict"
-                let addFd2Stx (stx:Stack) =
-                    match stx with
-                    | Some m ->
-                        if m.ContainsKey "funDict" then
-                            stx
-                        else
-                            m |> Map.add "funDict" (FD (CD<_, _> fd)) |> Some
-                    | None ->
-                        Map ["funDict", FD (CD<_, _> fd)] |> Some
+                //let addFd2Stx (stx:Stack) =
+                //    match stx with
+                //    | Some m ->
+                //        if m.ContainsKey "funDict" then
+                //            stx
+                //        else
+                //            m |> Map.add "funDict" (FD (CD<_, _> fd)) |> Some
+                //    | None ->
+                //        Map ["funDict", FD (CD<_, _> fd)] |> Some
 
                 printfn "[FunInvocation] depth: %d" depth
 
@@ -965,7 +965,7 @@ module Evaluate =
                                 exprsInFuncParamEvaluation parentFxParamSymbols paramValueExprList 0
                         //sysVarValueStack.Push (Some (ConcurrentDictionary<_, _> (dict evaluatedArgsOfParentCall)))
                         //let updatedStack = dict evaluatedArgsOfParentCall |> CD<_, _> |> Some
-                        let updatedStack = Map evaluatedArgsOfParentCall |> Some |> addFd2Stx
+                        let updatedStack = Map evaluatedArgsOfParentCall |> Some //|> addFd2Stx
 
                         match parentFxBody with
                         | Identifier aSymbol ->
@@ -1055,7 +1055,7 @@ module Evaluate =
                                     //        |> ConcurrentDictionary<_, _>
                                     //        //|> scopeCtx parentScopeIdOpt 
                                     //        |> Some
-                                    |> addFd2Stx
+                                    //|> addFd2Stx
                                 //let procEnv = {
                                 //    gCtx             = gContext
                                 //    sCtx             = sContext
