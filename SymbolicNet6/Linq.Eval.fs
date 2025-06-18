@@ -618,7 +618,11 @@ module Evaluate =
             | _ ->
                 failwithf  "Failed to find symbol %s" s
 
-        let inline getStackValue (procEnv_:ProcEnv) s  =
+        let
+#if RELEASE
+            inline
+#endif
+            getStackValue (procEnv_:ProcEnv) s  =
             //if sysVarValueStack.IsSome then
             if procEnv_.stx.IsSome then
                 match procEnv_.stx.Value.TryGetValue s with
@@ -627,7 +631,11 @@ module Evaluate =
             else
                 None
 
-        let inline getScopedContextValue (procEnv_:ProcEnv) s  =
+        let
+#if RELEASE
+            inline
+#endif
+            getScopedContextValue (procEnv_:ProcEnv) s  =
             if procEnv_.sCtx.IsNone then
                 None
             else
@@ -636,13 +644,21 @@ module Evaluate =
                 | _ ->
                     None
 
-        let inline getGlobalContextValue (procEnv_:ProcEnv) s =
+        let
+#if RELEASE
+            inline
+#endif
+            getGlobalContextValue (procEnv_:ProcEnv) s =
             match procEnv_.gCtx.ctx.TryGetValue s with
             | true, a -> a |> fnormalize |> Some
             | _ ->
                 None
 
-        let inline getValueBase (procEnv_:ProcEnv) s =
+        let
+#if RELEASE
+            inline
+#endif
+            getValueBase (procEnv_:ProcEnv) s =
             match getStackValue procEnv_ s with
             | Some v -> 3, v
             | None ->
@@ -683,12 +699,12 @@ module Evaluate =
                         //ifTop = false
             }
             evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues_, updatedProcEnv)
-        let reEvaluate3 parentScopeIdOpt_ symbolValues_ sysVarValueStack_ =
+        let reEvaluate3 depthDelta parentScopeIdOpt_ symbolValues_ sysVarValueStack_ =
             let updatedProcEnv = {
                 procEnv
                     with
                         stx = sysVarValueStack_
-                        depth = procEnv.depth + 1
+                        depth = procEnv.depth + depthDelta
                         //ifTop = false
             }
             evaluate2 (ifPrecise, parentScopeIdOpt_, symbolValues_, updatedProcEnv)
@@ -747,7 +763,7 @@ module Evaluate =
                     failwithf "PointwiseMul evaluation failed:\nLeft = %A\nRight = %A\nError = %s" lv rv ex.Message
         | Power (r, p) -> fpower (reRst r) (reRst p) |> fnormalize |> rstIt
         | Function (f, x) -> fapply f (reRst x) |> fnormalize |> rstIt
-        | FunctionN (f, xs) -> xs |> List.map reRst |> fapplyN f |> fnormalize |> rstIt
+        | FunctionN (f, xs) -> xs |> List.map reRst |> fapplyN f |> fnormalize |> rstIt 
         | FunInvocation (Symbol parentFxName, paramValueExprList) ->
             let cal_param_fd_val () = paramValueExprList |> List.map reRst
             let cal_param_obj_val () =
@@ -860,17 +876,27 @@ module Evaluate =
 
                 let sid = Some (scopeId ())
                 let sCtxFF = scopeCtxNew parentScopeIdOpt 
+                let depthDeltaDefFunConsidered = if parentFxName = "def" then 0 else 1
                 let depth, fd =
                     match (getValue "funDict") with
-                    | 0, f //getPassedInSymbolValue
-                    | 1, f -> //getGlobalContextValue
+                    | 0, f -> //getPassedInSymbolValue
+                    //| 1, f -> //getGlobalContextValue
                         procEnv.depth, f.funDict
-                    | 2, f -> //getScopedContextValue
-                        procEnv.depth + 1, f.funDict
+                    | d, f when d >= 3 -> //getScopedContextValue
+                        procEnv.depth + depthDeltaDefFunConsidered, f.funDict
                     | _, f -> //如果是3，則 getStackValue
                         failwith "Invalid funDict"
+                let addFd2Stx (stx:Stack) =
+                    match stx with
+                    | Some m ->
+                        if m.ContainsKey "funDict" then
+                            stx
+                        else
+                            m |> Map.add "funDict" (FD (CD<_, _> fd)) |> Some
+                    | None ->
+                        Map ["funDict", FD (CD<_, _> fd)] |> Some
 
-
+                printfn "[FunInvocation] depth: %d" depth
 
                 let exprsInFuncParamEvaluation (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) skip =
                     symbols
@@ -925,7 +951,6 @@ module Evaluate =
                             failwith "Invalid fun defined"
                     )
 
-
                 let r = 
                     match fd.[parentFxName] with
                     //       x1, y1    dup0(paramValueExprList)
@@ -940,7 +965,7 @@ module Evaluate =
                                 exprsInFuncParamEvaluation parentFxParamSymbols paramValueExprList 0
                         //sysVarValueStack.Push (Some (ConcurrentDictionary<_, _> (dict evaluatedArgsOfParentCall)))
                         //let updatedStack = dict evaluatedArgsOfParentCall |> CD<_, _> |> Some
-                        let updatedStack = Map evaluatedArgsOfParentCall |> Some
+                        let updatedStack = Map evaluatedArgsOfParentCall |> Some |> addFd2Stx
 
                         match parentFxBody with
                         | Identifier aSymbol ->
@@ -948,10 +973,10 @@ module Evaluate =
                             getValue aSymbol.SymbolName |> snd
                         | FunInvocation _ ->                       
                             
-                            reEvaluate3 sid symbolValues updatedStack parentFxBody
+                            reEvaluate3 depthDeltaDefFunConsidered sid symbolValues updatedStack parentFxBody
                             //evaluate2 (symbolValues, sysVarValueStack, (Some (fun () -> sysVarValueStack.TryPop() |> ignore))) parentFxBody
                         | _ ->
-                            let uSL, svm, frv = nestedFxHandler updatedStack fd sid reEvaluate3 parentFxParamSymbols symbolValues parentFxBody
+                            let uSL, svm, frv = nestedFxHandler updatedStack fd sid (reEvaluate3 depthDeltaDefFunConsidered) parentFxParamSymbols symbolValues parentFxBody
                             let rFrv, rUSl = renameSymbols (uSL, frv) //20250413 symbol 名稱統一化後，快取才有意義
 
                             let expr, cmpl = Compile.compileExpressionOrThrow2 rFrv rUSl
@@ -1030,7 +1055,7 @@ module Evaluate =
                                     //        |> ConcurrentDictionary<_, _>
                                     //        //|> scopeCtx parentScopeIdOpt 
                                     //        |> Some
-
+                                    |> addFd2Stx
                                 //let procEnv = {
                                 //    gCtx             = gContext
                                 //    sCtx             = sContext
@@ -1043,7 +1068,7 @@ module Evaluate =
                                 let rst =
                                     match defBody with
                                     | DBFun (almightFun, defOut) ->
-                                        let updatedProcEnv = almightFun parentScopeIdOpt {procEnv_ with stx = updatedStack; depth = procEnv_.depth + 1} symbolValues paramValueExprListOpt //gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
+                                        let updatedProcEnv = almightFun parentScopeIdOpt {procEnv_ with stx = updatedStack; depth = procEnv_.depth + depthDeltaDefFunConsidered} symbolValues paramValueExprListOpt //gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
 
                                         //let updatedProcEnv =
                                         //    if updatedProcEnv_.prevOutput.IsNone || updatedProcEnv_.prevOutput.Value.ifEvalRst then
@@ -1096,18 +1121,24 @@ module Evaluate =
 
                                                 let ifDef =
                                                     match a with
-                                                    | FunInvocation (Symbol "def", _) -> true
+                                                    | FunInvocation (Symbol fName, _) when fName = "def" (*|| fName = "let"*) -> true
                                                     | _ -> false
 
                                                 let updatedProcEnv =
                                                     if ifDef then
-                                                        updatedEnv_
+                                                        updatedEnv_ 
+                                                        //{
+                                                        //    updatedEnv_
+                                                        //        with
+                                                        //           stx = evalV.eEnv.stx
+
+                                                        //}
                                                     else
                                                         let updEnv, evalRst = evalV.ER
                                                         {
                                                             updatedEnv
                                                                 with
-                                                                    depth = procEnv_.depth
+                                                                    //depth = procEnv_.depth + 1
                                                                     gCtx = gCtxAppend updEnv.gCtx.ctx updatedEnv.gCtx 
                                                                     sCtx = sCtxAdd parentScopeIdOpt "it" evalRst updEnv.sCtx
                                                                     prevOutput = Some evalRst

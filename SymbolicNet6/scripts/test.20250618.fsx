@@ -28,9 +28,10 @@ let chk (cond) s (f) = if f <> cond then failwith s
 //type SCD = | S of CD<int, int>
 
 //let cdInS = CD<int, int>(dict [123, 456])
+//let cdInS2 = CD<int, int>(cdInS)
 //let scd = S cdInS
 
-//cdInS.TryAdd (456, 789)
+//cdInS.TryAdd (4560, 789)
 
 
 //(SymbolicExpression.Parse "(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
@@ -144,18 +145,26 @@ Definition.funDict.TryAdd ("eval", (DTProc ([
         //printfn "symbolValues: %A" symbolValues
         //printfn "=============================="
         let stxVal_v = stx.Value.TryGetValue(symX.SymbolName) |> snd
+        let fd = stx.Value["funDict"].funDict
         match stxVal_v with
         | NestedExpr l ->
+            //printfn "eval l: %A" l
             let dp = DTProc ([[], DBExp (l, OutFP)], 0, None)
             let gid = System.Guid.NewGuid().ToString().Replace("-", "")
-            let rm = Definition.funDict.TryRemove gid
-            let add = Definition.funDict.TryAdd (gid, dp)
-            let evaluated = evaluate2 (Evaluate.IF_PRECISE, parentScopeIdOpt, symbolValues, {procEnv with stx = Some (procEnv.stx.Value |> Map.remove symX.SymbolName)}) (FunInvocation (Symbol gid, []))
-            {
-                evaluated.eEnv
-                    with
-                        prevOutput = Some evaluated.eRst
-            }
+            let rm = fd.TryRemove gid
+            let add = fd.TryAdd (gid, dp)
+            //printfn "eval procEnv.stx %A" procEnv.stx.Value
+            //printfn "eval procEnv.stx.funDict %A" (procEnv.stx.Value["funDict"].funDict |> Seq.toArray)
+            try
+                let evaluated = evaluate2 (Evaluate.IF_PRECISE, parentScopeIdOpt, symbolValues, {procEnv with stx = Some (procEnv.stx.Value |> Map.remove symX.SymbolName)}) (FunInvocation (Symbol gid, []))
+                {
+                    evaluated.eEnv
+                        with
+                            prevOutput = Some evaluated.eRst
+                }
+            finally
+                let rm2 = fd.TryRemove gid
+                ()
         | _ ->
             failwith "Not NestedExpr to evaluate"
     ), OutFP))
@@ -205,6 +214,29 @@ Definition.funDict.TryAdd ("printCheck", (DTProc ([
     ), OutFP))
 ], 0, None)))
 
+//(SymbolicExpression.Parse "let(ttc, 789)").Evaluate(dict ["ttc1", FloatingPoint.Real 123.0])
+//(SymbolicExpression.Parse "print(123)").Evaluate(dict [])
+
+
+Definition.funDict.TryRemove "main"
+Definition.funDict.TryAdd ("main", DTProc ([
+    [], (DBExp ([
+        Infix.parseOrThrow "let(ttc, 789)"
+        Infix.parseOrThrow "print(ttc)"
+    ], OutVar [Symbol "ttc"]))
+], 0, None))
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+
+Definition.funDict.TryRemove "main"
+Definition.funDict.TryAdd ("main", DTProc ([
+    [], (DBExp ([
+        Infix.parseOrThrow "let(ttc1, 789)"
+        Infix.parseOrThrow "print(ttc)"
+    ], OutVar [Symbol "ttc"; Symbol "ttc1"]))
+], 0, None))
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+
+
 let defBase (parentScopeIdOpt:System.Guid option) (procEnv:ProcEnv) (symbolValues:SymbolValues) (exprs:Expression list option) =
         let g = procEnv.gCtx
         let s = 
@@ -226,13 +258,8 @@ let defBase (parentScopeIdOpt:System.Guid option) (procEnv:ProcEnv) (symbolValue
         printfn "funName: %s" funName
         let funParam =  pList |>List.map (fun e -> e.Ident)
         printfn "pList: %A" pList
-        //let funDef =  dList
 
-        //let ctx =X
-        //    if ifTop then
-        //        s.ctx
-        //    else
-        //        g.ctx
+        printfn "ifTop: %b, procEnv.depth: %d" ifTop procEnv.depth
 
         let fd =
             if ifTop then
@@ -260,59 +287,37 @@ let defBase (parentScopeIdOpt:System.Guid option) (procEnv:ProcEnv) (symbolValue
         effected
         //procEnv
 
-
-
-
 Definition.funDict.TryRemove "def"
 Definition.funDict.TryAdd ("def", (DTProc ([
     [name; paramCount; defCount; paramList; defList], (DBFun (defBase, OutFP))
 ], 0, None )))
 
-(SymbolicExpression.Parse "let(ttc, 789)").Evaluate(dict ["ttc1", FloatingPoint.Real 123.0])
-(SymbolicExpression.Parse "print(123)").Evaluate(dict [])
-
-
-Definition.funDict.TryRemove "main"
-Definition.funDict.TryAdd ("main", DTProc ([
-    [], (DBExp ([
-        Infix.parseOrThrow "let(ttc, 789)"
-        Infix.parseOrThrow "print(ttc)"
-    ], OutVar [Symbol "ttc"]))
-], 0, None))
-(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
-
-Definition.funDict.TryRemove "main"
-Definition.funDict.TryAdd ("main", DTProc ([
-    [], (DBExp ([
-        Infix.parseOrThrow "let(ttc1, 789)"
-        Infix.parseOrThrow "print(ttc)"
-    ], OutVar [Symbol "ttc"; Symbol "ttc1"]))
-], 0, None))
-(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
-
 //55a82fb8d6e0a188c7dfff2ae3c18d4459b8cc4d
 //這個 commit def 內的 def 一樣會定義在 depth = 0，所以出來繼續用，接下來要改成 def 內的只在 def 內生效
 (SymbolicExpression.Parse "def(yyds, 1, 1, x, x+1)").Evaluate(dict [])
+//(SymbolicExpression.Parse "yyds(123)").EvaluateNoThrow(dict []) |> chk (Choice2Of2 "The given key 'yyds' was not present in the dictionary.") "failed 0001"
 if (SymbolicExpression.Parse "yyds(123)").Evaluate(dict []) <> BR 124N then failwith "failed 0001"
 
-(SymbolicExpression.Parse "def(ttc, 1, 1, x, printCheck(x*2, 246))").Evaluate(dict [])
-if (SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) <> Undef then failwith "failed 0002"
 
+(SymbolicExpression.Parse "def(ttc, 1, 1, x, printCheck(x*2, 246))").Evaluate(dict [])
+//(SymbolicExpression.Parse "ttc(123)").EvaluateNoThrow(dict []) |> chk (Choice2Of2 "The given key 'ttc' was not present in the dictionary.") "failed 0002"
+if (SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) <> Undef then failwith "failed 0002"
 
 
 
 (SymbolicExpression.Parse "def(ttc, 1, 2, x, def(t1,1,1,x,x+100000))").Evaluate(dict [])
 (SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) |> chk Undef "failed 0003"
-(SymbolicExpression.Parse "t1(123)").Evaluate(dict []) |> chk (BR 100123N) "failed 0004"
+(SymbolicExpression.Parse "t1(123)").EvaluateNoThrow(dict []) |> chk (Choice2Of2 "The given key 't1' was not present in the dictionary.") "failed 0004"
 
 (SymbolicExpression.Parse "def(ttc, 1, 2, x, def(t1,1,1,x,x+100000), printCheck(x*2, 246))").Evaluate(dict [])
 (SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) |> chk Undef "failed 0005"
-(SymbolicExpression.Parse "t1(123)").Evaluate(dict []) |> chk (BR 100123N) "failed 0006"
+(SymbolicExpression.Parse "t1(123)").EvaluateNoThrow(dict []) |> chk (Choice2Of2 "The given key 't1' was not present in the dictionary.") "failed 0006"
 
 
-(SymbolicExpression.Parse "def(ttc, 1, 3, x, def(t1,1,1,x,x+100000), print(x*2), t1(x/3))").Evaluate(dict [])
+(SymbolicExpression.Parse "def(ttc, 1, 3, x, def(t1,1,1,x,x+300000), print(x*2), t1(x/3))").Evaluate(dict [])
 (SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) |> chk (BR 100041N) "failed 0007"
-(SymbolicExpression.Parse "t1(123)").Evaluate(dict []) |> chk (BR 100123N) "failed 0008"
+(SymbolicExpression.Parse "t1(123)").EvaluateNoThrow(dict []) |> chk (Choice2Of2 "The given key 't1' was not present in the dictionary.") "failed 0008"
+
 
 (SymbolicExpression.Parse "def(yyds, 1, 3, x, printCheck(x+1, 124), printCheck(x*2, 246), x/3)").Evaluate(dict [])
 (SymbolicExpression.Parse "yyds(123)").Evaluate(dict []) |> chk (BR 41N) "failed 0009"
