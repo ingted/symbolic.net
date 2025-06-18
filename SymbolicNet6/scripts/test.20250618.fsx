@@ -23,16 +23,18 @@ type Expr = SymbolicExpression
 open Definition
 open Evaluate
 
-type SCD = | S of CD<int, int>
+let chk (cond) s (f) = if f <> cond then failwith s
 
-let cdInS = CD<int, int>(dict [123, 456])
-let scd = S cdInS
+//type SCD = | S of CD<int, int>
 
-cdInS.TryAdd (456, 789)
+//let cdInS = CD<int, int>(dict [123, 456])
+//let scd = S cdInS
+
+//cdInS.TryAdd (456, 789)
 
 
-(SymbolicExpression.Parse "(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
-(SymbolicExpression.Parse "str(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
+//(SymbolicExpression.Parse "(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
+//(SymbolicExpression.Parse "str(ttc)").Evaluate(dict ["ttc", FloatingPoint.Real 123.0])
 
 Evaluate.IF_PRECISE <- true
 
@@ -40,7 +42,8 @@ let (BR ff) = (SymbolicExpression.Parse "(a + 1)^(x^(y * 2))").Evaluate(dict ["a
 
 let (Number n) = pow 3N (pow 3N 8N)
 
-ff=n
+
+ff |> chk n "IF_PRECISE failed"
 
 let symV = Symbol "v"
 let symW = Symbol "w"
@@ -56,8 +59,6 @@ let paramCount = Symbol "paramCnt"
 
 let def = Symbol "def"
 let defLineCount = Symbol "defLineCount"
-
-let chk (cond) s (f) = if f <> cond then failwith s
 
 Definition.funDict.TryRemove "len"
 Definition.funDict.TryAdd ("len", (DTProc ([

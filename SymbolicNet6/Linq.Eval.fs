@@ -688,6 +688,7 @@ module Evaluate =
                 procEnv
                     with
                         stx = sysVarValueStack_
+                        depth = procEnv.depth + 1
                         //ifTop = false
             }
             evaluate2 (ifPrecise, parentScopeIdOpt_, symbolValues_, updatedProcEnv)
@@ -861,12 +862,12 @@ module Evaluate =
                 let sCtxFF = scopeCtxNew parentScopeIdOpt 
                 let depth, fd =
                     match (getValue "funDict") with
-                    | 0, f
-                    | 1, f ->
+                    | 0, f //getPassedInSymbolValue
+                    | 1, f -> //getGlobalContextValue
                         procEnv.depth, f.funDict
-                    | 2, f ->
+                    | 2, f -> //getScopedContextValue
                         procEnv.depth + 1, f.funDict
-                    | _, f ->
+                    | _, f -> //如果是3，則 getStackValue
                         failwith "Invalid funDict"
 
 
@@ -1042,7 +1043,7 @@ module Evaluate =
                                 let rst =
                                     match defBody with
                                     | DBFun (almightFun, defOut) ->
-                                        let updatedProcEnv = almightFun parentScopeIdOpt {procEnv_ with stx = updatedStack} symbolValues paramValueExprListOpt //gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
+                                        let updatedProcEnv = almightFun parentScopeIdOpt {procEnv_ with stx = updatedStack; depth = procEnv_.depth + 1} symbolValues paramValueExprListOpt //gContext sContext prevOutputOpt updatedStack paramValueExprListOpt (sysVarValueStack.IsNone)
 
                                         //let updatedProcEnv =
                                         //    if updatedProcEnv_.prevOutput.IsNone || updatedProcEnv_.prevOutput.Value.ifEvalRst then
@@ -1063,6 +1064,7 @@ module Evaluate =
                                         let updatedProcEnvIt = {
                                             updatedProcEnv
                                                 with
+                                                    depth = procEnv_.depth
                                                     sCtx =
                                                         if updatedProcEnv.prevOutput.IsSome then
                                                             (sCtxAdd parentScopeIdOpt "it" updatedProcEnv.prevOutput.Value updatedProcEnv.sCtx)
@@ -1082,9 +1084,9 @@ module Evaluate =
                                     | DBExp (exprList, defOut) ->
                                         let updatedEnv =
                                             if procEnv_.prevOutput.IsSome then
-                                                {procEnv_ with stx = updatedStack; }
+                                                {procEnv_ with stx = updatedStack; depth = procEnv_.depth + 1; }
                                             else
-                                                {procEnv_ with stx = updatedStack; prevOutput = Some Undef}
+                                                {procEnv_ with stx = updatedStack; depth = procEnv_.depth + 1; prevOutput = Some Undef}
 
                                         let rstList, procEnv__ =
                                             exprList
@@ -1105,6 +1107,7 @@ module Evaluate =
                                                         {
                                                             updatedEnv
                                                                 with
+                                                                    depth = procEnv_.depth
                                                                     gCtx = gCtxAppend updEnv.gCtx.ctx updatedEnv.gCtx 
                                                                     sCtx = sCtxAdd parentScopeIdOpt "it" evalRst updEnv.sCtx
                                                                     prevOutput = Some evalRst
