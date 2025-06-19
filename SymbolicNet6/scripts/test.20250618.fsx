@@ -468,9 +468,9 @@ Definition.funDict.TryAdd ("main", DTProc ([
 
 
 
-Definition.funDict.Keys
-Definition.funDict["t1"]
-Definition.funDict["yyds"]
+//Definition.funDict.Keys
+//Definition.funDict["t1"]
+//Definition.funDict["yyds"]
 
 
 
@@ -527,10 +527,15 @@ let _ =
 (SymbolicExpression.Parse "let(x,x)").EvaluateBase(dict ["x", BR 1478N]).eEnv.sCtx.Value.ctx["x"] |> chk (BR 1478N) "failed 0016"
 
 let _ =
-    define "testDefine" ([Symbol "x"],
-        SymbolicExpression.XParse "eval(expr(x,123))") 
+    define "testDefine" ([Symbol "y"],
+        SymbolicExpression.XParse "eval(expr(y,y))") 
 
-(SymbolicExpression.Parse "testDefine(0)").EvaluateBase(dict [])
+(SymbolicExpression.Parse "testDefine(0)").Evaluate(dict ["x", BR 0N]) |> chk (BR 0N) "failed 0017.1"
+let _ =
+    define "testDefine" ([Symbol "y"],
+        SymbolicExpression.XParse "eval(expr(y,x))") 
+(SymbolicExpression.Parse "testDefine(1)").Evaluate(dict ["x", BR 1478N]) |> chk (BR 1478N) "failed 0017.2"
+(SymbolicExpression.Parse "eval(expr(x*2))").Evaluate(dict ["x", BR 1478N]) |> chk (BR 2956N) "failed 0017.3"
 
 
 (*
@@ -540,6 +545,75 @@ let _ =
 
 
 *)
+open System
+
+let nestedFxReplacer
+        (sysVarValueStack_:Stack)
+        (fxExpr: MathNet.Symbolics.Expression)
+        =
+
+        if sysVarValueStack_.IsNone then
+            sysVarValueStack_, fxExpr
+        else
+            let replacer = sysVarValueStack_.Value |> Map.toSeq |> Seq.map (fun (sym, v) -> sym, ("tmp_" + Guid.NewGuid().ToString("N"), v)) |> Seq.cache
+            let replacedStack:Stack = replacer |> Seq.map snd |> Map |> Some
+            let replacingMap = replacer |> Seq.map (fun (k, (nk, _)) -> k, nk) |> Map
+
+            let rec traverse expr =
+                match expr with
+                | Sum terms ->
+                    Sum (terms |> List.map traverse)
+                | Product terms ->
+                    Product (terms |> List.map traverse)
+                | PointwiseMul (expr1, expr2) ->
+                    PointwiseMul (traverse expr1, traverse expr1)
+                | Power (baseExpr, expExpr) ->
+                    Power (traverse baseExpr, traverse expExpr)
+                | Function (func, arg) ->
+                    Function (func, traverse arg)
+                | FunctionN (func, args) ->
+                    FunctionN (func, args |> List.map traverse)
+
+                | FunInvocation ((Symbol sb), origParamExp) ->
+                    FunInvocation ((Symbol sb), origParamExp |> List.map traverse)
+                | Argument s ->
+                    if replacingMap.ContainsKey s.SymbolName then
+                        Argument (Symbol replacingMap[s.SymbolName])
+                    else
+                        expr
+                | Identifier s ->
+                    if replacingMap.ContainsKey s.SymbolName then
+                        Identifier (Symbol replacingMap[s.SymbolName])
+                    else
+                        expr
+                | _ ->
+                   expr
+    
+            replacedStack, traverse fxExpr
+
+
+SymbolicExpression.XParse "eval(expr(y,y))" |> nestedFxReplacer (Some (Map ["y", BR 1478N]))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 Definition.funDict.Keys |> Seq.toArray

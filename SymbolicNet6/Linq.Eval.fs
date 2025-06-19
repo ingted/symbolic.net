@@ -524,6 +524,52 @@ module Evaluate =
     
         r
 
+
+    let nestedFxReplacer
+        (sysVarValueStack_:Stack)
+        (fxExpr: MathNet.Symbolics.Expression)
+        =
+
+        if sysVarValueStack_.IsNone then
+            sysVarValueStack_, fxExpr
+        else
+            let replacer = sysVarValueStack_.Value |> Map.toSeq |> Seq.map (fun (sym, v) -> sym, ("tmp_" + Guid.NewGuid().ToString("N"), v)) |> Seq.cache
+            let replacedStack:Stack = replacer |> Seq.map snd |> Map |> Some
+            let replacingMap = replacer |> Seq.map (fun (k, (nk, _)) -> k, nk) |> Map
+
+            let rec traverse expr =
+                match expr with
+                | Sum terms ->
+                    Sum (terms |> List.map traverse)
+                | Product terms ->
+                    Product (terms |> List.map traverse)
+                | PointwiseMul (expr1, expr2) ->
+                    PointwiseMul (traverse expr1, traverse expr1)
+                | Power (baseExpr, expExpr) ->
+                    Power (traverse baseExpr, traverse expExpr)
+                | Function (func, arg) ->
+                    Function (func, traverse arg)
+                | FunctionN (func, args) ->
+                    FunctionN (func, args |> List.map traverse)
+
+                | FunInvocation ((Symbol sb), origParamExp) ->
+                    FunInvocation ((Symbol sb), origParamExp |> List.map traverse)
+                | Argument s ->
+                    if replacingMap.ContainsKey s.SymbolName then
+                        Argument (Symbol replacingMap[s.SymbolName])
+                    else
+                        expr
+                | Identifier s ->
+                    if replacingMap.ContainsKey s.SymbolName then
+                        Identifier (Symbol replacingMap[s.SymbolName])
+                    else
+                        expr
+                | _ ->
+                   expr
+    
+            replacedStack, traverse fxExpr
+
+
     let eRst (f:FloatingPoint) = f.eRst
 
     let sCtxAppend (parentScopeIdOpt: Guid option) (ctx:Map<string, FloatingPoint>) (sCtx:ScopedContext) =
@@ -990,8 +1036,28 @@ module Evaluate =
                             getValue aSymbol.SymbolName |> snd
                         | FunInvocation _ ->                       
                             
-                            reEvaluate3 depthDeltaDefFunConsidered sid symbolValues updatedStack parentFxBody
-                            //evaluate2 (symbolValues, sysVarValueStack, (Some (fun () -> sysVarValueStack.TryPop() |> ignore))) parentFxBody
+                            //let uSL, svm, frv = nestedFxHandler updatedStack fd sid (reEvaluate3 depthDeltaDefFunConsidered) parentFxParamSymbols symbolValues parentFxBody
+                            //let rFrv, rUSl = renameSymbols (uSL, frv)
+                            //let sMap = (uSL,rUSl) ||> List.zip |> List.map (fun (s1,s2) -> s1.SymbolName, s2.SymbolName)|> Map
+                            //let uStx =
+                            //    updatedStack
+                            //    |> Option.map (fun m ->
+                            //        m
+                            //        |> Map.toSeq
+                            //        |> Seq.map (fun (k, v) ->
+                            //            if sMap.ContainsKey k then
+                            //                sMap[k], v
+                            //            else
+                            //                k, v
+                            //        )
+                            //        |> Map
+                            //    )
+                            //reEvaluate3 depthDeltaDefFunConsidered sid svm uStx rFrv
+
+                            let uStx, uBody = parentFxBody |> nestedFxReplacer updatedStack
+
+                            reEvaluate3 depthDeltaDefFunConsidered sid symbolValues uStx uBody
+                            //reEvaluate3 depthDeltaDefFunConsidered sid symbolValues updatedStack parentFxBody
                         | _ ->
                             let uSL, svm, frv = nestedFxHandler updatedStack fd sid (reEvaluate3 depthDeltaDefFunConsidered) parentFxParamSymbols symbolValues parentFxBody
                             let rFrv, rUSl = renameSymbols (uSL, frv) //20250413 symbol 名稱統一化後，快取才有意義
