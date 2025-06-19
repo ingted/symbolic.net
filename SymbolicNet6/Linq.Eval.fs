@@ -876,7 +876,7 @@ module Evaluate =
 
                 let sid = Some (scopeId ())
                 let sCtxFF = scopeCtxNew parentScopeIdOpt 
-                let depthDeltaDefFunConsidered = if parentFxName = "def" then 0 else 1
+                let depthDeltaDefFunConsidered = if parentFxName = "def" || parentFxName = "fun" then 0 else 1
                 let depth, fd =
                     match (getValue "funDict") with
                     | 0, f -> //getPassedInSymbolValue
@@ -1019,7 +1019,9 @@ module Evaluate =
                             //(ifTopInProc:bool)
                             (procStepId_:Guid)
                             =
+#if DEBUG
                             printfn "[procStepId][evalProc][%s] %s" parentFxName (procStepId_.ToString())
+#endif
                             match procList_ with
                             | [] ->
                                 //pop()
@@ -1136,7 +1138,9 @@ module Evaluate =
                                             //|> List.fold (fun (rstList_, _procEnv_) a ->
                                             |> List.fold (fun (rstList_, (updatedEnv_:ProcEnv)) a ->
                                                 let dbExpStep = procStepId()
+#if DEBUG
                                                 printfn "[procStepId][DBExp] %s, %s" (dbExpStep.ToString()) (a.ToString())
+#endif
                                                 let evalV = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, updatedEnv_) a
 
                                                 let ifDef =

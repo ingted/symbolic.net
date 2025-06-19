@@ -423,7 +423,9 @@ f()
 printfn "%d" x
 *)
 
-
+let _ =
+    define "testDefine" ([Symbol "x"],
+        SymbolicExpression.XParse "x * 2") 
 
 
 

@@ -191,6 +191,7 @@ Definition.funDict.TryAdd ("eval", (DTProc ([
     ), OutFP))
 ], 0, None)))
 
+(SymbolicExpression.Parse "eval(expr(x,123))").EvaluateNoThrow(dict ["y", BR 1478N])  |> chk (Choice2Of2 "Failed to find symbol x") "eval001.5 failed"
 (SymbolicExpression.Parse "eval(expr(x,123))").Evaluate(dict ["x", BR 1478N]) |> chk (BR 123N) "eval001 failed"
 (SymbolicExpression.Parse "len(123,456)").EvaluateNoThrow(dict []) |> chk (Choice2Of2 "len not supported, BR 123N") "eval001.1 failed"
 (SymbolicExpression.Parse "len(param(123,456))").Evaluate(dict []) |> chk (FloatingPoint.Real 2.0) "eval001.2 failed"
@@ -525,7 +526,11 @@ let _ =
 
 (SymbolicExpression.Parse "let(x,x)").EvaluateBase(dict ["x", BR 1478N]).eEnv.sCtx.Value.ctx["x"] |> chk (BR 1478N) "failed 0016"
 
+let _ =
+    define "testDefine" ([Symbol "x"],
+        SymbolicExpression.XParse "eval(expr(x,123))") 
 
+(SymbolicExpression.Parse "testDefine(0)").EvaluateBase(dict [])
 
 
 (*
