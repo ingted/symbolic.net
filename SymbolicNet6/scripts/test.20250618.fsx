@@ -218,6 +218,21 @@ Definition.funDict.TryAdd ("print", (DTProc ([
     ), OutFP))
 ], 0, None)))
 
+Definition.funDict.TryRemove "print2"
+Definition.funDict.TryAdd ("print2", (DTProc ([
+    [symX;symY;], (DBFun ((fun parentScopeIdOpt procEnv symbolValues exprs ->
+        let g = procEnv.gCtx
+        let s = procEnv.sCtx
+        let prevO = procEnv.prevOutput
+        let stx = procEnv.stx
+        let ifTop = procEnv.depth = 0
+        printfn "Stack keys: %A" stx.Value.Keys
+        printfn "x => %A" (stx.Value.TryGetValue "x" |> snd)
+        printfn "y => %A" (stx.Value.TryGetValue "y" |> snd)
+        procEnv
+    ), OutFP))
+], 0, None)))
+
 Definition.funDict.TryRemove "printCheck"
 Definition.funDict.TryAdd ("printCheck", (DTProc ([
     [symX;symY;], (DBFun ((fun parentScopeIdOpt procEnv symbolValues exprs ->
@@ -226,17 +241,19 @@ Definition.funDict.TryAdd ("printCheck", (DTProc ([
         let prevO = procEnv.prevOutput
         let stx = procEnv.stx
         let ifTop = procEnv.depth = 0
-        printfn "PC => %A" (stx.Value.TryGetValue "x" |> snd)
-        let _, check = stx.Value.TryGetValue "y"
-        if stx.Value.TryGetValue "x" <> stx.Value.TryGetValue "y" then
-            { procEnv with prevOutput = Some (Str $"x <> {check}") }
+        let _, checkX = stx.Value.TryGetValue "x"
+        let _, checkY = stx.Value.TryGetValue "y"
+        printfn "PC => %A" checkX
+        if checkX <> checkY then
+            failwith $"printCheck failure! x <> {checkY}"
+            //{ procEnv with prevOutput = Some (Str $"x <> {check}") }
         else
             { procEnv with prevOutput = Some Undef }
     ), OutFP))
 ], 0, None)))
 
 //(SymbolicExpression.Parse "let(ttc, 789)").Evaluate(dict ["ttc1", FloatingPoint.Real 123.0])
-//(SymbolicExpression.Parse "print(123)").Evaluate(dict [])
+//(SymbolicExpression.Parse "print2(123, 987, 0)").Evaluate(dict [])
 
 
 Definition.funDict.TryRemove "main"
@@ -246,14 +263,25 @@ Definition.funDict.TryAdd ("main", DTProc ([
         Infix.parseOrThrow "print(ttc)"
     ], OutVar [Symbol "ttc"]))
 ], 0, None))
-(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0]) |> chk (NestedList [BR 789N]) "t1.001"
 
 Definition.funDict.TryRemove "main"
 Definition.funDict.TryAdd ("main", DTProc ([
     [], (DBExp ([
         Infix.parseOrThrow "let(ttc1, 789)"
-        Infix.parseOrThrow "print(ttc)"
+        Infix.parseOrThrow "printCheck(ttc, 9487)"
+        Infix.parseOrThrow "printCheck(ttc1, 789)"
+    ], OutVar [Symbol "ttc"; Symbol "ttc1"]))
+], 0, None))
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", BR 9487N])
+|> chk (NestedList [BR 9487N; BR 789N]) "t1.002"
+
+Definition.funDict.TryRemove "main"
+Definition.funDict.TryAdd ("main", DTProc ([
+    [], (DBExp ([
+        Infix.parseOrThrow "let(ttc1, 789)"
         Infix.parseOrThrow "print(ttc1)"
+        Infix.parseOrThrow "print(ttc)"
     ], OutVar [Symbol "ttc"; Symbol "ttc1"]))
 ], 0, None))
 (SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
@@ -429,11 +457,11 @@ Definition.funDict.TryAdd ("main", DTProc ([
         Infix.parseOrThrow "let(x, 123)"
         Infix.parseOrThrow "def(ttc, 2, 3, y1, y2, let(x,456), print(x), print(y2))"
         Infix.parseOrThrow "ttc(100,200)"
-        Infix.parseOrThrow "print(x)"
+        Infix.parseOrThrow "printCheck(x, 123)"
     ], OutVar [Symbol "x"]))
 ], 0, None))
 (SymbolicExpression.Parse "main()").Evaluate(dict ["x", FloatingPoint.Real 9487.0; "ttc", FloatingPoint.Real 1487.0])
-|> chk (BR 123N) "failed 0011"
+|> chk (NestedList [BR 123N]) "failed 0011"
 
 
 
@@ -463,10 +491,11 @@ Definition.funDict.TryRemove "main"
 Definition.funDict.TryAdd ("main", DTProc ([
     [], (DBExp ([
         Infix.parseOrThrow "let(ttc, str(789))"
-        Infix.parseOrThrow "print(ttc)"
+        Infix.parseOrThrow "printCheck(ttc, str(789))"
     ], OutVar [Symbol "ttc"]))
 ], 0, None))
 (SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+|> chk (NestedList [Str "789"]) "t1.002"
 
 BigRational.ToDouble(BigRational.FromDecimal 789M).ToString();;
 

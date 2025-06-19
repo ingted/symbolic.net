@@ -898,12 +898,29 @@ module Evaluate =
 
                 printfn "[FunInvocation] depth: %d" depth
 
+
+                //TODO 20250619: 這樣就限制了動態不固定長度函數像是 自由長度的 print 之類的
                 let exprsInFuncParamEvaluation (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) skip =
                     symbols
                     |> Seq.skip skip
                     |> Seq.mapi (fun i sb ->
                         sb.SymbolName, reRst exprs[i + skip]
                     )
+
+                let exprsInFuncParamEvaluation_GPT提供過不了 (symbols: Symbol list) (exprs: MathNet.Symbolics.Expression list) skip =
+                    let guidSymbols =
+                        Seq.initInfinite (fun _ ->
+                            Symbol ("tmp_" + Guid.NewGuid().ToString("N")) // 加 tmp_ 前綴，N 格式無 "-"
+                        )
+
+                    let requiredSymbols =
+                        symbols
+                        |> Seq.skip skip
+                        |> Seq.append guidSymbols
+                        |> Seq.truncate (exprs.Length - skip) // 與剩餘的 exprs 數量對齊
+
+                    Seq.zip requiredSymbols (exprs |> Seq.skip skip)
+                    |> Seq.map (fun (sb, ex) -> sb.SymbolName, reRst ex)
 
                 let exprsInDefAliasFun (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) =
                     symbols
