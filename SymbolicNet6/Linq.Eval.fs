@@ -1002,6 +1002,7 @@ module Evaluate =
                             //(ifTopInProc:bool)
                             (procStepId_:Guid)
                             =
+                            printfn "[procStepId][evalProc][%s] %s" parentFxName (procStepId_.ToString())
                             match procList_ with
                             | [] ->
                                 //pop()
@@ -1117,34 +1118,37 @@ module Evaluate =
                                             exprList
                                             //|> List.fold (fun (rstList_, _procEnv_) a ->
                                             |> List.fold (fun (rstList_, (updatedEnv_:ProcEnv)) a ->
+                                                let dbExpStep = procStepId()
+                                                printfn "[procStepId][DBExp] %s, %s" (dbExpStep.ToString()) (a.ToString())
                                                 let evalV = evaluate2 (ifPrecise, parentScopeIdOpt, symbolValues, updatedEnv_) a
 
                                                 let ifDef =
                                                     match a with
-                                                    | FunInvocation (Symbol fName, _) when fName = "def" (*|| fName = "let"*) -> true
+                                                    | FunInvocation (Symbol fName, _) when fName = "def" || fName = "let" -> true
                                                     | _ -> false
 
                                                 let updatedProcEnv =
+                                                    let updEnv, evalRst = evalV.ER
                                                     if ifDef then
-                                                        updatedEnv_ 
-                                                        //{
-                                                        //    updatedEnv_
-                                                        //        with
-                                                        //           stx = evalV.eEnv.stx
-
-                                                        //}
-                                                    else
-                                                        let updEnv, evalRst = evalV.ER
                                                         {
-                                                            updatedEnv
+                                                            updatedEnv_
+                                                                with
+                                                                    gCtx = gCtxAppend updEnv.gCtx.ctx updatedEnv.gCtx 
+                                                                    sCtx = sCtxAppend parentScopeIdOpt updEnv.sCtx.Value.ctx updatedEnv_.sCtx
+                                                                    prevOutput = Some evalRst
+
+                                                        }
+                                                    else
+                                                        {
+                                                            updatedEnv_
                                                                 with
                                                                     //depth = procEnv_.depth + 1
                                                                     gCtx = gCtxAppend updEnv.gCtx.ctx updatedEnv.gCtx 
-                                                                    sCtx = sCtxAdd parentScopeIdOpt "it" evalRst updEnv.sCtx
+                                                                    sCtx = sCtxAdd parentScopeIdOpt "it" evalRst updatedEnv_.sCtx
                                                                     prevOutput = Some evalRst
                                                         }
 
-                                                (procStepId(), evalV.eRst)::rstList_, updatedProcEnv //(Some evalV)
+                                                (dbExpStep, evalV.eRst)::rstList_, updatedProcEnv //(Some evalV)
                                             ) ([], updatedEnv)
 
                                         match defOut with

@@ -226,12 +226,12 @@ Definition.funDict.TryAdd ("printCheck", (DTProc ([
         let prevO = procEnv.prevOutput
         let stx = procEnv.stx
         let ifTop = procEnv.depth = 0
-        printfn "=> %A" (stx.Value.TryGetValue "x" |> snd)
+        printfn "PC => %A" (stx.Value.TryGetValue "x" |> snd)
         let _, check = stx.Value.TryGetValue "y"
         if stx.Value.TryGetValue "x" <> stx.Value.TryGetValue "y" then
             { procEnv with prevOutput = Some (Str $"x <> {check}") }
         else
-            procEnv
+            { procEnv with prevOutput = Some Undef }
     ), OutFP))
 ], 0, None)))
 
@@ -253,6 +253,7 @@ Definition.funDict.TryAdd ("main", DTProc ([
     [], (DBExp ([
         Infix.parseOrThrow "let(ttc1, 789)"
         Infix.parseOrThrow "print(ttc)"
+        Infix.parseOrThrow "print(ttc1)"
     ], OutVar [Symbol "ttc"; Symbol "ttc1"]))
 ], 0, None))
 (SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
@@ -289,7 +290,7 @@ let defBase (parentScopeIdOpt:System.Guid option) (procEnv:ProcEnv) (symbolValue
                 if s.ctx.ContainsKey "funDict" then
                     s.ctx["funDict"].funDict
                 else
-                    new FunDict()
+                    new FunDict(Definition.funDict)
 
         let removed, _ = fd.TryRemove funName
         let proc = DTProc ([funParam, DBExp (dList, OutFP)], 0, None)
@@ -334,16 +335,19 @@ if (SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) <> Undef then failwit
 (SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) |> chk Undef "failed 0005"
 (SymbolicExpression.Parse "t1(123)").EvaluateNoThrow(dict []) |> chk (Choice2Of2 "The given key 't1' was not present in the dictionary.") "failed 0006"
 
+(SymbolicExpression.Parse "def(ttc, 1, 2, x, x, printCheck(x*2, 246))").Evaluate(dict [])
+(SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) |> chk Undef "failed 0005.1"
+
 
 (SymbolicExpression.Parse "def(ttc, 1, 3, x, def(t1,1,1,x,x+300000), print(x*2), t1(x/3))").Evaluate(dict [])
-(SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) |> chk (BR 100041N) "failed 0007"
+(SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) |> chk (BR 300041N) "failed 0007"
 (SymbolicExpression.Parse "t1(123)").EvaluateNoThrow(dict []) |> chk (Choice2Of2 "The given key 't1' was not present in the dictionary.") "failed 0008"
 
 
 (SymbolicExpression.Parse "def(yyds, 1, 3, x, printCheck(x+1, 124), printCheck(x*2, 246), x/3)").Evaluate(dict [])
 (SymbolicExpression.Parse "yyds(123)").Evaluate(dict []) |> chk (BR 41N) "failed 0009"
 
-(SymbolicExpression.Parse "tttt(123)")
+//(SymbolicExpression.Parse "tttt(123)")
 
 
 
@@ -425,10 +429,11 @@ Definition.funDict.TryAdd ("main", DTProc ([
         Infix.parseOrThrow "let(x, 123)"
         Infix.parseOrThrow "def(ttc, 2, 3, y1, y2, let(x,456), print(x), print(y2))"
         Infix.parseOrThrow "ttc(100,200)"
+        Infix.parseOrThrow "print(x)"
     ], OutVar [Symbol "x"]))
 ], 0, None))
 (SymbolicExpression.Parse "main()").Evaluate(dict ["x", FloatingPoint.Real 9487.0; "ttc", FloatingPoint.Real 1487.0])
-|> chk (BR 1023N) "failed 0011"
+|> chk (BR 123N) "failed 0011"
 
 
 
