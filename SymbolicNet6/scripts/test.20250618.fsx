@@ -573,7 +573,7 @@ Definition.funDict.TryAdd ("iif", (DTProc ([
             }
         | NestedExpr l ->
             printfn "l: %A" l
-            let evaluated = evaluate2 (Evaluate.IF_PRECISE, parentScopeIdOpt, symbolValues, procEnv) (FunInvocation (Symbol "eval", l))
+            let evaluated = evaluate2 (Evaluate.IF_PRECISE, parentScopeIdOpt, symbolValues, procEnv) (FunInvocation (Symbol "eval", [FunInvocation (Symbol "expr",l)]))
             let rst =
                 match evaluated.eRst with
                 | FB b -> b
@@ -595,7 +595,7 @@ Definition.funDict.TryAdd ("iif", (DTProc ([
 |> chk (BR 1479N) "failed 0018.1"
 
 (SymbolicExpression.Parse "expr(let(a,false()), a)").Evaluate(dict ["x", BR 1478N])
-(SymbolicExpression.Parse "eval(expr(let(a,false()), a))").Evaluate(dict ["x", BR 1478N])
+(SymbolicExpression.Parse "eval(expr(let(a,false()), a))").Evaluate(dict [])
 (SymbolicExpression.Parse "let(a,false())").EvaluateBase(dict ["x", BR 1478N])
 
 
