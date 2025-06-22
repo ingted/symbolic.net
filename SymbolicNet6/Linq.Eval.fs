@@ -941,9 +941,9 @@ module Evaluate =
                 //            m |> Map.add "funDict" (FD (CD<_, _> fd)) |> Some
                 //    | None ->
                 //        Map ["funDict", FD (CD<_, _> fd)] |> Some
-
+#if DEBUG
                 printfn "[FunInvocation] depth: %d" depth
-
+#endif
 
                 //TODO 20250619: 這樣就限制了動態不固定長度函數像是 自由長度的 print 之類的
                 let exprsInFuncParamEvaluation (symbols:Symbol list) (exprs:MathNet.Symbolics.Expression list) skip =
