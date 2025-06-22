@@ -132,7 +132,7 @@ module Evaluate =
 #if TENSOR_SUPPORT
         | Real x, WTensor (DSTensor t) -> WTensor (DSTensor (x * t))
 #endif
-        | (u_, v_) -> failwith "not supported"
+        | (u_, v_) -> failwith "fmultiply not supported %A" (u_, v_)
 
     let rec Pow (baseValue: BigRational, exponent: BigRational) : BigRational =
         if exponent.Denominator = BigInteger.One then
@@ -911,7 +911,8 @@ module Evaluate =
                         param_val
                         |> Array.skip 1
                         |> Array.fold matmulFoldHandler param_val.[0]
-
+                    | "true" -> FB true
+                    | "false" -> FB false
                     | "expr"
                     | "param" ->
                         NestedExpr paramValueExprList

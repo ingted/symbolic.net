@@ -15,6 +15,8 @@ module Definition =
                    "str"    , true
                    "expr"   , true
                    "param"  , true
+                   "true"  , true
+                   "false"  , true
                    ]
 
     let keyWord = dict kwlist

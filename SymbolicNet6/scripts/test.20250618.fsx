@@ -144,7 +144,7 @@ Definition.funDict.TryAdd ("eval", (DTProc ([
         printfn $"ifTop: {ifTop}"
         //printfn "symbolValues: %A" symbolValues
         //printfn "=============================="
-        let stxVal_v = stx.Value.TryGetValue(symX.SymbolName) |> snd
+        let stxVal_x = stx.Value.TryGetValue(symX.SymbolName) |> snd
         //let fd = stx.Value["funDict"].funDict
 
         //let s = 
@@ -160,10 +160,10 @@ Definition.funDict.TryAdd ("eval", (DTProc ([
                     procEnv.sCtx.Value.ctx["funDict"].funDict, procEnv.sCtx
                 else
                     printfn "scoped context not have FD"
-                    let nfd = new FunDict()
+                    let nfd = new FunDict(Definition.funDict)
                     nfd, sCtxAdd parentScopeIdOpt "funDict" (FD nfd) procEnv.sCtx
 
-        match stxVal_v with
+        match stxVal_x with
         | NestedExpr l ->
             //printfn "eval l: %A" l
             let dp = DTProc ([[], DBExp (l, OutFP)], 0, None)
@@ -187,7 +187,7 @@ Definition.funDict.TryAdd ("eval", (DTProc ([
                 let rm2 = fd.TryRemove gid
                 ()
         | _ ->
-            failwith "Not NestedExpr to evaluate"
+            failwithf "Not NestedExpr to evaluate, stxVal_x: %A" stxVal_x
     ), OutFP))
 ], 0, None)))
 
@@ -257,35 +257,35 @@ Definition.funDict.TryAdd ("printCheck", (DTProc ([
 //(SymbolicExpression.Parse "print2(123, 987, 0)").Evaluate(dict [])
 
 
-Definition.funDict.TryRemove "main"
-Definition.funDict.TryAdd ("main", DTProc ([
+Definition.funDict.TryRemove "main1"
+Definition.funDict.TryAdd ("main1", DTProc ([
     [], (DBExp ([
         Infix.parseOrThrow "let(ttc, 789)"
         Infix.parseOrThrow "print(ttc)"
     ], OutVar [Symbol "ttc"]))
 ], 0, None))
-(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0]) |> chk (NestedList [BR 789N]) "t1.001"
+(SymbolicExpression.Parse "main1()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0]) |> chk (NestedList [BR 789N]) "t1.001"
 
-Definition.funDict.TryRemove "main"
-Definition.funDict.TryAdd ("main", DTProc ([
+Definition.funDict.TryRemove "main1"
+Definition.funDict.TryAdd ("main1", DTProc ([
     [], (DBExp ([
         Infix.parseOrThrow "let(ttc1, 789)"
         Infix.parseOrThrow "printCheck(ttc, 9487)"
         Infix.parseOrThrow "printCheck(ttc1, 789)"
     ], OutVar [Symbol "ttc"; Symbol "ttc1"]))
 ], 0, None))
-(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", BR 9487N])
+(SymbolicExpression.Parse "main1()").Evaluate(dict ["ttc", BR 9487N])
 |> chk (NestedList [BR 9487N; BR 789N]) "t1.002"
 
-Definition.funDict.TryRemove "main"
-Definition.funDict.TryAdd ("main", DTProc ([
+Definition.funDict.TryRemove "main1"
+Definition.funDict.TryAdd ("main1", DTProc ([
     [], (DBExp ([
         Infix.parseOrThrow "let(ttc1, 789)"
         Infix.parseOrThrow "print(ttc1)"
         Infix.parseOrThrow "print(ttc)"
     ], OutVar [Symbol "ttc"; Symbol "ttc1"]))
 ], 0, None))
-(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+(SymbolicExpression.Parse "main1()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
 
 
 let defBase (parentScopeIdOpt:System.Guid option) (procEnv:ProcEnv) (symbolValues:SymbolValues) (exprs:Expression list option) =
@@ -384,8 +384,8 @@ if (SymbolicExpression.Parse "ttc(123)").Evaluate(dict []) <> Undef then failwit
 
 
 
-Definition.funDict.TryRemove "main"
-Definition.funDict.TryAdd ("main", DTProc ([
+Definition.funDict.TryRemove "main1"
+Definition.funDict.TryAdd ("main1", DTProc ([
     [], (DBExp ([
         Infix.parseOrThrow "let(ttc1, 789)"
         Infix.parseOrThrow "let(y, 10000000)"
@@ -398,12 +398,12 @@ Definition.funDict.TryAdd ("main", DTProc ([
         Infix.parseOrThrow "printCheck(gg, 100792)"
     ], OutFP))
 ], 0, None))
-(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0]) |> chk Undef "failed 0010"
+(SymbolicExpression.Parse "main1()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0]) |> chk Undef "failed 0010"
 
 
 
-Definition.funDict.TryRemove "main"
-Definition.funDict.TryAdd ("main", DTProc ([
+Definition.funDict.TryRemove "main1"
+Definition.funDict.TryAdd ("main1", DTProc ([
     [], (DBExp ([
         Infix.parseOrThrow "let(ttc1, 789)"
         //Infix.parseOrThrow "let(y, 10000000)"
@@ -424,8 +424,17 @@ Definition.funDict.TryAdd ("main", DTProc ([
         Infix.parseOrThrow "print(gg)"
     ], OutVar [Symbol "gg"]))
 ], 0, None))
-(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0]) |> chk (NestedList [BR 100805N]) "failed 0010"
+(SymbolicExpression.Parse "main1()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0]) |> chk (NestedList [BR 100805N]) "failed 0010"
 
+
+Definition.funDict.TryRemove "main"
+Definition.funDict.TryAdd ("main", DTProc ([
+    [], (DBExp ([
+        Infix.parseOrThrow "main1()"
+    ], OutFP))
+], 0, None))
+(SymbolicExpression.Parse "main()").Evaluate(dict ["ttc", FloatingPoint.Real 9487.0])
+ |> chk (NestedList [BR 100805N]) "failed 0010.1"
 
 
 Definition.funDict.TryRemove "main"
@@ -537,6 +546,76 @@ let _ =
 (SymbolicExpression.Parse "testDefine(1)").Evaluate(dict ["x", BR 1478N]) |> chk (BR 1478N) "failed 0017.2"
 (SymbolicExpression.Parse "eval(expr(x*2))").Evaluate(dict ["x", BR 1478N]) |> chk (BR 2956N) "failed 0017.3"
 
+Definition.funDict.TryRemove "iif"
+Definition.funDict.TryAdd ("iif", (DTProc ([
+    [symX;symY;symZ], (DBFun ((fun parentScopeIdOpt procEnv symbolValues exprs ->
+        let g = procEnv.gCtx
+        let s = procEnv.sCtx
+        let prevO = procEnv.prevOutput
+        let stx = procEnv.stx
+        let ifTop = procEnv.depth = 0
+        let _, X = stx.Value.TryGetValue "x"
+        let _, Y = stx.Value.TryGetValue "y"
+        let _, Z = stx.Value.TryGetValue "z"
+        printfn "iif => %A %A %A" X Y Z
+        match X with
+        | FB b -> 
+            {
+                procEnv
+                    with
+                        prevOutput = Some (if b then Y else Z)
+            }
+        | NestedExpr [FunInvocation (Symbol b, [])] when b = "true" || b = "false" ->
+            {
+                procEnv
+                    with
+                        prevOutput = Some (if b = "true" then Y else Z)
+            }
+        | NestedExpr l ->
+            printfn "l: %A" l
+            let evaluated = evaluate2 (Evaluate.IF_PRECISE, parentScopeIdOpt, symbolValues, procEnv) (FunInvocation (Symbol "eval", l))
+            let rst =
+                match evaluated.eRst with
+                | FB b -> b
+                | v -> failwithf "Invalid return type, FB <bool> expected, but %A evaluated" v
+            {
+                evaluated.eEnv
+                    with
+                        prevOutput = Some (if rst then Y else Z)
+            }
+        | v ->
+            failwithf "Invalid logical expr, FB <bool> or NestedExpr <Expression list> expected, but %A provided" v
+        
+    ), OutFP))
+], 0, None)))
+
+(SymbolicExpression.Parse "iif(expr(true()), 123, x+1)").Evaluate(dict ["x", BR 1478N])
+|> chk (BR 123N) "failed 0018.0"
+(SymbolicExpression.Parse "iif(expr(false()), 123, x+1)").Evaluate(dict ["x", BR 1478N])
+|> chk (BR 1479N) "failed 0018.1"
+
+(SymbolicExpression.Parse "expr(let(a,false()), a)").Evaluate(dict ["x", BR 1478N])
+(SymbolicExpression.Parse "eval(expr(let(a,false()), a))").Evaluate(dict ["x", BR 1478N])
+(SymbolicExpression.Parse "let(a,false())").EvaluateBase(dict ["x", BR 1478N])
+
+
+Definition.funDict.TryRemove "main"
+Definition.funDict.TryAdd ("main", DTProc ([
+    [], (DBExp ([
+        Infix.parseOrThrow "let(a,false())"
+        
+    ], OutVar [Symbol "a"]))
+], 0, None))
+(SymbolicExpression.Parse "main()").Evaluate(dict [])
+
+
+
+
+
+
+
+(SymbolicExpression.Parse "iif(expr(let(a,false()), a), 123, x+1)").Evaluate(dict ["x", BR 1478N])
+|> chk (BR 1479N) "failed 0018.1"
 
 (*
 +		["exprList"]	NestedExpr [FunInvocation (Symbol "expr", [Sum [Number 1N; Identifier (Symbol ...); ...]; ...]); ...]	

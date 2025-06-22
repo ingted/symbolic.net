@@ -6,7 +6,7 @@
     </PropertyGroup>
     <PropertyGroup Condition="'$(IfTensorSupport)'=='true'">
 
-        <TargetFrameworks>net9.0;netstandard2.1</TargetFrameworks>
+        <TargetFrameworks>net9.0<!--;netstandard2.1--></TargetFrameworks>
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <OutputType>Exe</OutputType>
 
@@ -14,7 +14,7 @@
     </PropertyGroup>
 
     <PropertyGroup Condition="'$(IfTensorSupport)'=='false'">
-        <TargetFrameworks>net9.0;netstandard2.0</TargetFrameworks>
+        <TargetFrameworks>net9.0<!--;netstandard2.0--></TargetFrameworks>
 
         <GenerateDocumentationFile>true</GenerateDocumentationFile>
         <OutputType>Exe</OutputType>
