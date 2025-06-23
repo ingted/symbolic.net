@@ -643,6 +643,36 @@ Definition.funDict.TryAdd ("main", DTProc ([
 (SymbolicExpression.Parse "iif(iif(expr(let(a,false()), a), 123, true()), expr(888,x), expr(777))").Evaluate(dict ["x", BR 1478N])
 |> chk (BR 1478N) "failed 0018.3"
 
+
+Definition.funDict.TryRemove "mySum"
+Definition.funDict.TryAdd ("mySum", (DTProc ([
+    [symX], (DBFun ((fun parentScopeIdOpt procEnv symbolValues exprs ->
+        let stx = procEnv.stx
+        
+        let _, (nx) = stx.Value.TryGetValue "x"
+        printfn "%A" nx
+        let (NestedExpr X) = nx
+        let v =
+            X
+            |> List.map (fun v ->
+                match v with
+                | (Number br) -> br
+                | (Approximation (Real f)) ->
+                    BigRational.FromDecimal (decimal f)
+            )
+            |> List.sum |> BR
+        {
+            procEnv
+                with
+                    prevOutput = Some v
+        }
+
+    ), OutFP))
+], 0, None)))
+
+
+(SymbolicExpression.Parse "mySum(expr(1,2,3,4/5,6/7,8.3))").Evaluate(dict [])
+
 (*
 +		["exprList"]	NestedExpr [FunInvocation (Symbol "expr", [Sum [Number 1N; Identifier (Symbol ...); ...]; ...]); ...]	
 +		["name"]	Str "yyds1"	
