@@ -83,6 +83,7 @@ and [<NoComparison>] FloatingPoint =
     | NestedList of FloatingPoint list
     | NestedMap of Map<string, FloatingPoint>
     | EvalRst of ProcEnv * FloatingPoint
+    //| FFun of string //20250623: 不做了，想到要支援 lambda 就覺得實在困難
     //| NestedSet of ConcurrentBag<FloatingPoint>
     | FB of bool
     | FD of FunDict

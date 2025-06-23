@@ -555,9 +555,26 @@ Definition.funDict.TryAdd ("iif", (DTProc ([
         let stx = procEnv.stx
         let ifTop = procEnv.depth = 0
         let _, X = stx.Value.TryGetValue "x"
-        let _, Y = stx.Value.TryGetValue "y"
-        let _, Z = stx.Value.TryGetValue "z"
-        printfn "iif => %A %A %A" X Y Z
+        let _, Y_ = stx.Value.TryGetValue "y"
+        let _, Z_ = stx.Value.TryGetValue "z"
+        printfn "iif => %A %A %A %A" X Y_ Z_ exprs
+
+        let procNestedExp f =
+            match f with
+            | NestedExpr l ->
+                //match l with
+                //| [FunInvocation (Symbol "expr", ll)] ->
+                    let evaluated = evaluate2 (Evaluate.IF_PRECISE, parentScopeIdOpt, symbolValues, procEnv) (FunInvocation (Symbol "eval", [FunInvocation (Symbol "expr", l)]))
+                    evaluated.eRst
+                //| _ ->
+                //    printfn "procNestedExp l: %A" l
+                //    f
+            | _ ->
+                f
+
+        let Y = procNestedExp Y_
+        let Z = procNestedExp Z_
+
         match X with
         | FB b -> 
             {
@@ -616,6 +633,15 @@ Definition.funDict.TryAdd ("main", DTProc ([
 
 (SymbolicExpression.Parse "iif(expr(let(a,false()), a), 123, x+1)").Evaluate(dict ["x", BR 1478N])
 |> chk (BR 1479N) "failed 0018.1"
+
+(SymbolicExpression.Parse "iif(iif(expr(let(a,false()), a), 123, false()), 888, 777)").Evaluate(dict ["x", BR 1478N])
+|> chk (BR 777N) "failed 0018.2"
+
+(SymbolicExpression.Parse "iif(iif(expr(let(a,false()), a), 123, true()), 888, expr(777))").Evaluate(dict ["x", BR 1478N])
+|> chk (BR 888N) "failed 0018.3"
+
+(SymbolicExpression.Parse "iif(iif(expr(let(a,false()), a), 123, true()), expr(888,x), expr(777))").Evaluate(dict ["x", BR 1478N])
+|> chk (BR 1478N) "failed 0018.3"
 
 (*
 +		["exprList"]	NestedExpr [FunInvocation (Symbol "expr", [Sum [Number 1N; Identifier (Symbol ...); ...]; ...]); ...]	
